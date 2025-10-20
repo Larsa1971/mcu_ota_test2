@@ -132,27 +132,27 @@ async def update_display():
             
             
             
-            # 24h Min
-            minmax_str = f"24h Min: {min_th:.2f}°C"
+            # Styr Min
+            minmax_str = f"Styr Min: {min_th:.2f}°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 90, scale=2)
             
-            # 24h Max
-            minmax_str = f"24h Max: {max_th:.2f}°C"
+            # Styr Max
+            minmax_str = f"Styr Max: {max_th:.2f}°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 110, scale=2)
 
 
-            # Styr Min
-            minmax_str = f"Styr Min: {min_th:.0f}°C"
+            # 24h Min
+            minmax_str = f"24h Min: {min_th:.0f}°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 130, scale=2)
 
-            # Styr Max
-            minmax_str = f"Styr Max: {max_th:.0f}°C"
+            # 24h Max
+            minmax_str = f"24h Max: {max_th:.0f}°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 150, scale=2)
