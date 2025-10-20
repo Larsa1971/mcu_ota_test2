@@ -73,6 +73,9 @@ async def periodic_time_sync(hours=6):
 
 
 async def main():
+    # Återställer föregående om fel.
+    await ota.rollback_if_broken()
+    
     # kopplar upp wifi
     await wifi_connect(secret.WIFI_SSID, secret.WIFI_PASSWORD)
 
