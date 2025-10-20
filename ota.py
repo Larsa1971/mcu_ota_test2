@@ -97,14 +97,20 @@ async def ota_worker():
         await asyncio.sleep(secret.CHECK_INTERVAL_OTA)
 
 
-def rollback_if_broken():
+async def rollback_if_broken():
+    print("Kollar om det finns app_main_old.py kvar")
     if "app_main_old.py" in os.listdir() and "app_main.py" in os.listdir():
         try:
             with open("app_main.py") as f:
                 compile(f.read(), "app_main.py", "exec")
             print("app_main.py – OK")
+            os.remove("app_main_old.py")
+            print("app_main_old.py – Deletad")
         except Exception as e:
             print("⚠️ Fel i app_main.py – gör rollback", e)
             os.remove("app_main.py")
-            os.rename("app_main.py.old", "app_main.py")
+            os.rename("app_main_old.py", "app_main.py")
             await task_handler.graceful_restart()
+    else:
+        print("Ingen app_main_old.py finns!")
+
