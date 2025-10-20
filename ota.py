@@ -1,5 +1,8 @@
 import uasyncio as asyncio
 import machine, os, urequests, ubinascii, secret
+import task_handler
+
+
 
 # CHECK_INTERVAL = 60 * 30  # kolla var 30:e minut
 
@@ -73,12 +76,7 @@ async def ota_check():
                         with open("version.py", "wb") as f:
                             f.write(remote_version_py)
                         print("✅ Uppdatering klar – startar om")
-                        await asyncio.sleep(1)
-#                        machine.reset()
-                        # Trigger watchdog reset som ofta är "hårdare"
-                        wdt = machine.WDT(timeout=500)
-                        while True:
-                            pass  # Låt WDT trigga omstart
+                        await task_handler.graceful_restart()
 
 
             except Exception as e:
@@ -96,7 +94,7 @@ async def ota_check():
 async def ota_worker():
     while True:
         await ota_check()
-        await asyncio.sleep(secret.CHECK_INTERVAL)
+        await asyncio.sleep(secret.CHECK_INTERVAL_OTA)
 
 
 def rollback_if_broken():
@@ -109,9 +107,5 @@ def rollback_if_broken():
             print("⚠️ Fel i app_main.py – gör rollback", e)
             os.remove("app_main.py")
             os.rename("app_main.py.old", "app_main.py")
-            await asyncio.sleep(1)
-#            machine.reset()
-            # Trigger watchdog reset som ofta är "hårdare"
-            wdt = machine.WDT(timeout=500)
-            while True:
-                pass  # Låt WDT trigga omstart            
+            await task_handler.graceful_restart()
+
