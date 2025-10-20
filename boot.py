@@ -7,7 +7,7 @@ import os
 print("boot.py körs")
 time.sleep(1)
 
-def wifi_connect(ssid, password, timeout=15):
+def wifi_connect(ssid, password, timeout=20):
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     if not wlan.isconnected():
