@@ -194,7 +194,7 @@ async def update_display():
         display.text("Kyla", 0, 55, scale=2)
         display.text("Lyse", 280, 55, scale=2)
         display.text("Uppd", 0, 182, scale=2)
-        display.text("Omst", 280, 182, scale=2)
+        display.text("Stat", 280, 182, scale=2)
 
 
 
