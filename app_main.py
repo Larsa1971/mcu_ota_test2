@@ -274,19 +274,5 @@ async def read_temperature():
 
 # === Main ===
 async def main():
-#    await wifi_and_time_sync()
-#    await asyncio.gather(
-#        wifi_watchdog(),
-#        update_display(),
-#        read_temperature()
-#    )
-
     task_handler.create_managed_task(update_display())
     task_handler.create_managed_task(read_temperature())
-
-#try:
-#    asyncio.run(main())
-#except Exception as e:
-#    print("Fatal error i main():", e)
-
-
