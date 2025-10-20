@@ -2,6 +2,7 @@ import uasyncio as asyncio
 import machine
 import network
 import time
+import task_handler
 
 start_time = time.ticks_ms()
 
@@ -96,11 +97,13 @@ async def handle_client(reader, writer, ota_callback=None):
             writer.write(response.encode('utf-8'))
             await writer.drain()
             await writer.aclose()
-            # Starta om efter kort delay
-            def reboot_later():
-                machine.reset()
-            asyncio.get_event_loop().call_later(0.1, reboot_later)
+            await task_handler.graceful_restart()
 
+        elif "GET /" in request:
+            response = get_status_html()
+            writer.write(response.encode('utf-8'))
+            await writer.drain()
+            await writer.aclose()
         else:
             response = get_status_html()
             writer.write(response.encode('utf-8'))
