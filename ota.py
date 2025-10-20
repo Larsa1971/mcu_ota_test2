@@ -108,4 +108,3 @@ def rollback_if_broken():
             os.remove("app_main.py")
             os.rename("app_main.py.old", "app_main.py")
             await task_handler.graceful_restart()
-
