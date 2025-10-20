@@ -3,6 +3,7 @@ import machine
 import network
 import time
 import task_handler
+import ota
 
 start_time = time.ticks_ms()
 
@@ -88,9 +89,8 @@ async def handle_client(reader, writer, ota_callback=None):
             writer.write(response.encode('utf-8'))
             await writer.drain()
             await writer.aclose()
-            if ota_callback:
-                # Starta OTA efter en kort delay för att hinna skicka svar
-                asyncio.get_event_loop().call_later(0.1, ota_callback)
+            await asyncio.sleep(1)
+            await ota.ota_check()
 
         elif "GET /reboot" in request:
             response = get_simple_response("Startar om enheten...")
