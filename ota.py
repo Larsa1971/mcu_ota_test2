@@ -77,11 +77,14 @@ async def ota_check():
                         print("✅ Uppdatering klar – startar om")
                         await task_handler.graceful_restart()
 
+
             except SyntaxError as e:
                 print("Syntaxfel i ny app:")
-#                print(f"Fil: {e.filename}")
-                print(f"Rad {e.lineno}: {e.msg}")
-        
+                if hasattr(e, "args") and len(e.args) > 0:
+                    print("Detaljer:", e.args)
+                else:
+                    print("Felmeddelande:", e)
+
             except Exception as e:
                 print("Kodfel vid kompilering:", e)
                 if "app_main_new.py" in os.listdir():
