@@ -2,6 +2,7 @@
 from picographics import PicoGraphics, DISPLAY_PICO_DISPLAY_2
 import uasyncio as asyncio
 import gc
+import time
 from machine import Pin, I2C
 import onewire, ds18x20
 import secret # Wi-Fi-inställningar
@@ -30,6 +31,9 @@ ow_pin = Pin(11)
 ds_sensor = ds18x20.DS18X20(onewire.OneWire(ow_pin))
 roms = ds_sensor.scan()
 temperature_c = None
+temp_history = []  # lista av (timestamp, temp)
+temp_24h_min = None
+temp_24h_max = None
 
 # === GPIO-styrningar ===
 control_pin_9 = Pin(9, Pin.OUT)
@@ -68,6 +72,28 @@ def read_current():
 def read_power():
     raw = read_ina260_register(0x03)
     return raw * 10 / 1000.0
+
+
+
+
+async def update_temp_history(current_temp):
+    global temp_history, temp_24h_min, temp_24h_max
+
+    now = time.time()
+    temp_history.append((now, current_temp))
+
+    # Rensa poster äldre än 24 timmar (86400 sekunder)
+    cutoff = now - 86400
+    temp_history = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
+
+    # Beräkna min och max om listan inte är tom
+    temps = [temp for _, temp in temp_history]
+    if temps:
+        temp_24h_min = min(temps)
+        temp_24h_max = max(temps)
+
+
+
 
 
 # === Display-uppdatering ===
@@ -146,18 +172,23 @@ async def update_display():
 
 
             # 24h Min
-            minmax_str = f"24h Min: {min_th:.0f}°C"
+            if temp_24h_min is not None:
+                minmax_str = f"24h Min: {temp_24h_min:.2f}°C"
+            else:
+                minmax_str = "24h Min: --°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 130, scale=2)
-
+            
             # 24h Max
-            minmax_str = f"24h Max: {max_th:.0f}°C"
+            if temp_24h_max is not None:
+                minmax_str = f"24h Max: {temp_24h_max:.2f}°C"
+            else:
+                minmax_str = "24h Max: --°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 150, scale=2)
-
-
+            
 
             # Larm 
             if temperature_c >= TEMP_ALARM_THRESHOLD and alarm_visible:
@@ -218,6 +249,7 @@ async def read_temperature():
         await asyncio.sleep(0.75)
         try:
             temperature_c = ds_sensor.read_temp(roms[0])
+            await update_temp_history(temperature_c)
             print("Init temp: {:.2f}°C".format(temperature_c))
         except Exception as e:
             print("Init-temp fel:", e)
