@@ -121,7 +121,7 @@ async def update_display():
         time_str = ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(*t[:6]))
         display.set_pen(WHITE)
         x = (320 - display.measure_text(time_str, scale=3)) // 2
-        display.text(time_str, x, 0, scale=3)
+        display.text(time_str, x, 1, scale=3)
 
         # Temperatur
         if temperature_c is not None:
@@ -196,7 +196,7 @@ async def update_display():
                 alarm_str = f"LARM TEMP OVER : {TEMP_ALARM_THRESHOLD:.0f}°C"
                 x = (320 - display.measure_text(alarm_str, scale=2)) // 2
                 display.set_pen(RED)
-                display.text(alarm_str, x, 170, scale=2)
+                display.text(alarm_str, x, 172, scale=2)
 
         # INA260
         try:
