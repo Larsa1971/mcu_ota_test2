@@ -109,4 +109,3 @@ async def rollback_if_broken():
             await task_handler.graceful_restart()
     else:
         print("Ingen app_main_old.py finns!")
-
