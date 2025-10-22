@@ -31,9 +31,9 @@ ow_pin = Pin(11)
 ds_sensor = ds18x20.DS18X20(onewire.OneWire(ow_pin))
 roms = ds_sensor.scan()
 temperature_c = None
-temp_history = []  # lista av (timestamp, temp)
-temp_24h_min = None
-temp_24h_max = None
+global temp_history = []  # lista av (timestamp, temp)
+global temp_24h_min = None
+global temp_24h_max = None
 
 # === GPIO-styrningar ===
 control_pin_9 = Pin(9, Pin.OUT)
@@ -98,7 +98,7 @@ async def update_temp_history(current_temp):
 
 # === Display-uppdatering ===
 async def update_display():
-    global temperature_c, alarm_visible, use_gpio_10, control_output_state_9, control_output_state_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
+    global temperature_c, alarm_visible, use_gpio_10, control_output_state_9, control_output_state_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20, temp_history, temp_24h_min, temp_24h_max
     display.set_font("bitmap8")
 
     while True:
@@ -235,7 +235,7 @@ async def update_display():
 
 # === Temperaturmätning (endast trigger 12) ===
 async def read_temperature():
-    global temperature_c, control_output_state_9, control_output_state_10, use_gpio_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
+    global temperature_c, control_output_state_9, control_output_state_10, use_gpio_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20, temp_history, temp_24h_min, temp_24h_max
 
     # Init GPIO vid start
     control_pin_9.value(0)
