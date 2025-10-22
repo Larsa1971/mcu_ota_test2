@@ -196,7 +196,7 @@ async def update_display():
                 alarm_str = f"LARM TEMP OVER : {TEMP_ALARM_THRESHOLD:.0f}°C"
                 x = (320 - display.measure_text(alarm_str, scale=2)) // 2
                 display.set_pen(RED)
-                display.text(alarm_str, x, 173, scale=2)
+                display.text(alarm_str, x, 174, scale=2)
 
         # INA260
         try:
