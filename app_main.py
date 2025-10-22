@@ -89,7 +89,7 @@ async def update_temp_history(current_temp):
 
     # Beräkna min och max om listan inte är tom
     temps = [temp for _, temp in temp_history]
-    if temps:
+    if temps
         temp_24h_min = min(temps)
         temp_24h_max = max(temps)
 
