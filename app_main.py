@@ -5,16 +5,16 @@ import gc
 import time
 from machine import Pin, I2C
 import onewire, ds18x20
-import secret # Wi-Fi-inställningar
+import secret # inställningar
 import task_handler
 import tiden
 
 # === Temperaturgränser ===
-TEMP_OFF_THRESHOLD_9 = 27.0
-TEMP_ON_THRESHOLD_9 = 28.0
-TEMP_OFF_THRESHOLD_10 = 26.5
-TEMP_ON_THRESHOLD_10 = 27.0
-TEMP_ALARM_THRESHOLD = 29.0
+TEMP_OFF_THRESHOLD_9 = secret.LOW_TEMP_MIN
+TEMP_ON_THRESHOLD_9 = secret.LOW_TEMP_MAX
+TEMP_OFF_THRESHOLD_10 = secret.HIGH_TEMP_MIN
+TEMP_ON_THRESHOLD_10 = secret.HIGH_TEMP_MAX
+TEMP_ALARM_THRESHOLD = secret.LARM_TEMP
 
 # === Display setup ===
 display = PicoGraphics(display=DISPLAY_PICO_DISPLAY_2, rotate=0)
