@@ -75,7 +75,7 @@ def read_power():
 
 
 
-def update_temp_history(current_temp):
+async def update_temp_history(current_temp):
     global temp_history, temp_24h_min, temp_24h_max
     print("Current_temp:", current_temp)
     print("min_temp:", temp_24h_min)
@@ -250,7 +250,7 @@ async def read_temperature():
         await asyncio.sleep(0.75)
         try:
             temperature_c = ds_sensor.read_temp(roms[0])
-            update_temp_history(temperature_c)
+            await update_temp_history(temperature_c)
             print("Init temp: {:.2f}°C".format(temperature_c))
         except Exception as e:
             print("Init-temp fel:", e)
@@ -261,6 +261,7 @@ async def read_temperature():
             await asyncio.sleep(0.75)
             if roms:
                 temperature_c = ds_sensor.read_temp(roms[0])
+                await update_temp_history(temperature_c)
                 print("Temperatur: {:.2f}°C   Use GPIO10: {}".format(temperature_c, use_gpio_10))
 
                 # Trigger from GPIO12
