@@ -43,11 +43,11 @@ backlight_pin_20 = Pin(20, Pin.OUT) # Tända och släcka skärmen
 backlight_pin_20.value(1)
 
 led_red = Pin(6, Pin.OUT) # Tända och släcka skärmen
-led_red.value(0)
+led_red.value(1)
 led_green = Pin(7, Pin.OUT) # Tända och släcka skärmen
-led_green.value(0)
+led_green.value(1)
 led_blue = Pin(8, Pin.OUT) # Tända och släcka skärmen
-led_blue.value(0)
+led_blue.value(1)
 
 trigger_pin_12 = Pin(12, Pin.IN, Pin.PULL_UP)  # Pull-up, triggas vid låg (0)
 trigger_pin_13 = Pin(13, Pin.IN, Pin.PULL_UP)
