@@ -9,7 +9,6 @@ import web_server
 import task_handler
 import app_main
 
-
 print("main.py körs")
 time.sleep(1)
 
@@ -70,8 +69,6 @@ async def periodic_time_sync(hours=6):
         await sync_time()
 
 
-
-
 async def main():
     # Återställer föregående om fel.
     await ota.rollback_if_broken()
@@ -79,12 +76,13 @@ async def main():
     # kopplar upp wifi
     await wifi_connect(secret.WIFI_SSID, secret.WIFI_PASSWORD)
 
+    # ota check vid start
+    await ota.ota_check()
+    
     task_handler.create_managed_task(monitor_wifi())
-    task_handler.create_managed_task(ota.ota_worker())
     task_handler.create_managed_task(web_server.start_web_server())
     task_handler.create_managed_task(periodic_time_sync(hours=secret.TIME_SYNC_REPEAT))
     task_handler.create_managed_task(app_main.main())
-
 
     while True:
         await asyncio.sleep(3600)
@@ -93,4 +91,3 @@ try:
     asyncio.run(main())
 finally:
     asyncio.new_event_loop()
-    
