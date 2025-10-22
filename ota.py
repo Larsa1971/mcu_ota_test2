@@ -1,3 +1,4 @@
+import gc
 import uasyncio as asyncio
 import machine, os, urequests, ubinascii, secret
 import task_handler
@@ -50,6 +51,7 @@ def get_remote_version():
 # ============
 async def ota_check():
     try:
+        gc.collect()
         local_ver = get_local_version()
         remote_ver, remote_version_py = get_remote_version()
         print("Lokal version:", local_ver, "Remote version:", remote_ver)
