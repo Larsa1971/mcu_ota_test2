@@ -4,9 +4,6 @@ import machine, os, urequests, ubinascii, secret
 import task_handler
 
 
-
-# CHECK_INTERVAL = 60 * 30  # kolla var 30:e minut
-
 # ============
 # GitHub helpers
 # ============
@@ -80,7 +77,11 @@ async def ota_check():
                         print("✅ Uppdatering klar – startar om")
                         await task_handler.graceful_restart()
 
-
+            except SyntaxError as e:
+                print("Syntaxfel i ny app:")
+                print(f"Fil: {e.filename}")
+                print(f"Rad {e.lineno}: {e.msg}")
+        
             except Exception as e:
                 print("Kodfel vid kompilering:", e)
                 if "app_main_new.py" in os.listdir():
@@ -91,13 +92,6 @@ async def ota_check():
             print("Ingen ny version")
     except Exception as e:
         print("OTA error:", e)
-
-
-async def ota_worker():
-    while True:
-        await ota_check()
-        await asyncio.sleep(secret.CHECK_INTERVAL_OTA)
-
 
 async def rollback_if_broken():
     print("Kollar om det finns app_main_old.py kvar")
