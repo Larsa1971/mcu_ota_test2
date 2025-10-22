@@ -3,7 +3,7 @@ from picographics import PicoGraphics, DISPLAY_PICO_DISPLAY_2
 import uasyncio as asyncio
 import gc
 import time
-from machine import Pin, I2C
+from machine import Pin, I2C, PWM
 import onewire, ds18x20
 import secret # inställningar
 import task_handler
@@ -42,12 +42,16 @@ control_pin_10 = Pin(10, Pin.OUT)
 backlight_pin_20 = Pin(20, Pin.OUT) # Tända och släcka skärmen
 backlight_pin_20.value(1)
 
-led_red = Pin(6, Pin.OUT) # Tända och släcka skärmen
-led_red.value(1)
-led_green = Pin(7, Pin.OUT) # Tända och släcka skärmen
-led_green.value(1)
-led_blue = Pin(8, Pin.OUT) # Tända och släcka skärmen
-led_blue.value(1)
+led_red = PWM(Pin(6)) # Tända och släcka skärmen
+led_red.freq(1000)
+led_red.duty_u16(65535)
+led_green = PWM(Pin(7)) # Tända och släcka skärmen
+led_green.freq(1000)
+led_green.duty_u16(65535)
+led_blue = PWM(Pin(8)) # Tända och släcka skärmen
+led_blue.freq(1000)
+led_blue.duty_u16(65535)
+
 
 trigger_pin_12 = Pin(12, Pin.IN, Pin.PULL_UP)  # Pull-up, triggas vid låg (0)
 trigger_pin_13 = Pin(13, Pin.IN, Pin.PULL_UP)
@@ -106,7 +110,8 @@ async def update_temp_history(current_temp):
 
 # === Display-uppdatering ===
 async def update_display():
-    global temperature_c, alarm_visible, use_gpio_10, control_output_state_9, control_output_state_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20, temp_24h_min, temp_24h_max
+    global alarm_visible, use_gpio_10, control_output_state_9, control_output_state_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
+    global temperature_c, temp_24h_min, temp_24h_max, led_red, led_green, led_blue
     display.set_font("bitmap8")
 
     while True:
@@ -158,13 +163,29 @@ async def update_display():
             
             if comp_str == "Komp: High":
                 display.set_pen(BLUE)
+                led_red.duty_u16(20000)
+                led_green.duty_u16(65535)
+                led_blue.duty_u16(65535)
             elif comp_str == "Komp: Low":
                 display.set_pen(LIGHTBLUE)
+                led_red.duty_u16(65535)
+                led_green.duty_u16(65535)
+                led_blue.duty_u16(20000)
             elif comp_str == "Komp: Off":
                 display.set_pen(LIGHTGREEN)
+                led_red.duty_u16(65535)
+                led_green.duty_u16(65535)
+                led_blue.duty_u16(65535)
+
+                
             display.text(comp_str, x, 60, scale=3)
             
-            
+
+
+
+
+
+
             
             # Styr Min
             minmax_str = f"Styr Min: {min_th:.2f}°C"
@@ -317,3 +338,4 @@ async def read_temperature():
 async def main():
     task_handler.create_managed_task(update_display())
     task_handler.create_managed_task(read_temperature())
+
