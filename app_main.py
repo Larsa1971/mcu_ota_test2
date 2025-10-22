@@ -75,8 +75,7 @@ def read_power():
 
 
 
-
-async def update_temp_history(current_temp):
+def update_temp_history(current_temp):
     global temp_history, temp_24h_min, temp_24h_max
     print("Current_temp:", current_temp)
     print("min_temp:", temp_24h_min)
@@ -251,7 +250,7 @@ async def read_temperature():
         await asyncio.sleep(0.75)
         try:
             temperature_c = ds_sensor.read_temp(roms[0])
-            await update_temp_history(temperature_c)
+            update_temp_history(temperature_c)
             print("Init temp: {:.2f}°C".format(temperature_c))
         except Exception as e:
             print("Init-temp fel:", e)
