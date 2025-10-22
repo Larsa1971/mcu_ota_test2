@@ -79,7 +79,7 @@ async def ota_check():
 
             except SyntaxError as e:
                 print("Syntaxfel i ny app:")
-                print(f"Fil: {e.filename}")
+#                print(f"Fil: {e.filename}")
                 print(f"Rad {e.lineno}: {e.msg}")
         
             except Exception as e:
