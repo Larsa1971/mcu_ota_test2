@@ -96,7 +96,8 @@ async def update_temp_history(current_temp):
 
     # Rensa poster äldre än 24 timmar (86400 sekunder)
     cutoff = now - 86400
-    temp_history = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
+#    temp_history = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
+	temp_history[:] = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
 
     # Beräkna min och max om listan inte är tom
     temps = [temp for _, temp in temp_history]
