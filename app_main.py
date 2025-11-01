@@ -89,11 +89,12 @@ def read_power():
 
 
 async def update_temp_history(current_temp):
-    global temp_history, temp_24h_min, temp_24h_max
+    global temp_history, temp_24h_min, temp_24h_max, led_green
 
     temp_history.append(current_temp)
     if len(temp_history) > MAXLEN:
         temp_history.pop(0)
+        led_green.duty_u16(20000)
 
 # Beräkna min och max om listan inte är tom
     if temp_history != None:
