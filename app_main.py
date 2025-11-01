@@ -90,9 +90,7 @@ def read_power():
 
 async def update_temp_history(current_temp):
     global temp_history, temp_24h_min, temp_24h_max
-    print("Current_temp:", current_temp)
-    print("min_temp:", temp_24h_min)
-    print("max_temp:", temp_24h_max)
+
     temp_history.append(current_temp)
     if len(temp_history) > MAXLEN:
         temp_history.pop(0)
@@ -101,6 +99,10 @@ async def update_temp_history(current_temp):
     if temp_history != None:
         temp_24h_min = min(temp_history)
         temp_24h_max = max(temp_history)
+        
+    print("Current_temp:", current_temp)
+    print("min_temp:", temp_24h_min)
+    print("max_temp:", temp_24h_max)
 
 
 
