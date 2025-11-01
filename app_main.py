@@ -33,7 +33,7 @@ ds_sensor = ds18x20.DS18X20(onewire.OneWire(ow_pin))
 roms = ds_sensor.scan()
 temperature_c = None
 temp_history = []
-MAXLEN = 10800
+MAXLEN =  3600 #10800
 temp_24h_min = None
 temp_24h_max = None
 
