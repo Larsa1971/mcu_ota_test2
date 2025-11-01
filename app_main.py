@@ -4,6 +4,7 @@ import uasyncio as asyncio
 import gc
 import time
 from machine import Pin, I2C, PWM
+from collections import deque
 import onewire, ds18x20
 import secret # inställningar
 import task_handler
@@ -31,7 +32,8 @@ ow_pin = Pin(11)
 ds_sensor = ds18x20.DS18X20(onewire.OneWire(ow_pin))
 roms = ds_sensor.scan()
 temperature_c = None
-temp_history = []  # lista av (timestamp, temp)
+#temp_history = []  # lista av (timestamp, temp)
+temp_history = deque(maxlen=2880)
 temp_24h_min = None
 temp_24h_max = None
 
@@ -95,9 +97,9 @@ async def update_temp_history(current_temp):
     temp_history.append((now, current_temp))
 
     # Rensa poster äldre än 24 timmar (86400 sekunder)
-    cutoff = now - 86400
-#    temp_history = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
-	temp_history[:] = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
+#    cutoff = now - 86400
+#o    temp_history = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
+#	temp_history[:] = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
 
     # Beräkna min och max om listan inte är tom
     temps = [temp for _, temp in temp_history]
@@ -203,18 +205,18 @@ async def update_display():
 
             # 24h Min
             if temp_24h_min is not None:
-                minmax_str = f"24h Min: {temp_24h_min:.2f}°C"
+                minmax_str = f"6h Min: {temp_24h_min:.2f}°C"
             else:
-                minmax_str = "24h Min: --°C"
+                minmax_str = "6h Min: --°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 130, scale=2)
             
             # 24h Max
             if temp_24h_max is not None:
-                minmax_str = f"24h Max: {temp_24h_max:.2f}°C"
+                minmax_str = f"6h Max: {temp_24h_max:.2f}°C"
             else:
-                minmax_str = "24h Max: --°C"
+                minmax_str = "6h Max: --°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 150, scale=2)
