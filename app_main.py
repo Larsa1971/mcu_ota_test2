@@ -202,18 +202,18 @@ async def update_display():
 
             # 24h Min
             if temp_24h_min is not None:
-                minmax_str = f"6h Min: {temp_24h_min:.2f}°C"
+                minmax_str = f"2h Min: {temp_24h_min:.2f}°C"
             else:
-                minmax_str = "6h Min: --°C"
+                minmax_str = "2h Min: --°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 130, scale=2)
             
             # 24h Max
             if temp_24h_max is not None:
-                minmax_str = f"6h Max: {temp_24h_max:.2f}°C"
+                minmax_str = f"2h Max: {temp_24h_max:.2f}°C"
             else:
-                minmax_str = "6h Max: --°C"
+                minmax_str = "2h Max: --°C"
             x = (320 - display.measure_text(minmax_str, scale=2)) // 2
             display.set_pen(WHITE)
             display.text(minmax_str, x, 150, scale=2)
