@@ -32,7 +32,8 @@ ow_pin = Pin(11)
 ds_sensor = ds18x20.DS18X20(onewire.OneWire(ow_pin))
 roms = ds_sensor.scan()
 temperature_c = None
-temp_history = deque(maxlen=10800)
+temp_history = []
+MAXLEN = 10800
 temp_24h_min = None
 temp_24h_max = None
 
@@ -93,13 +94,10 @@ async def update_temp_history(current_temp):
     print("min_temp:", temp_24h_min)
     print("max_temp:", temp_24h_max)
     temp_history.append(current_temp)
+    if len(temp_history) > MAXLEN:
+        temp_history.pop(0)
 
-    # Rensa poster äldre än 24 timmar (86400 sekunder)
-#    cutoff = now - 86400
-#o    temp_history = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
-#	temp_history[:] = [(t, temp) for (t, temp) in temp_history if t >= cutoff]
-
-    # Beräkna min och max om listan inte är tom
+# Beräkna min och max om listan inte är tom
     if temp_history != None:
         temp_24h_min = min(temp_history)
         temp_24h_max = max(temp_history)
@@ -338,4 +336,3 @@ async def read_temperature():
 async def main():
     task_handler.create_managed_task(update_display())
     task_handler.create_managed_task(read_temperature())
-
