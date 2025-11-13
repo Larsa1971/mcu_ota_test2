@@ -3,12 +3,16 @@ from picographics import PicoGraphics, DISPLAY_PICO_DISPLAY_2
 import uasyncio as asyncio
 import gc
 import time
+import network
 from machine import Pin, I2C, PWM
 from collections import deque
 import onewire, ds18x20
 import secret # inställningar
 import task_handler
 import tiden
+
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
 
 # === Temperaturgränser ===
 TEMP_OFF_THRESHOLD_9 = secret.LOW_TEMP_MIN
@@ -33,7 +37,6 @@ ds_sensor = ds18x20.DS18X20(onewire.OneWire(ow_pin))
 roms = ds_sensor.scan()
 temperature_c = None
 temp_history = []
-MAXLEN =  3600 #10800
 temp_24h_min = None
 temp_24h_max = None
 
@@ -66,6 +69,23 @@ control_output_state_10 = False
 use_gpio_10 = False
 alarm_visible = True
 
+DISPLAY_DATA = {
+    "temperature": None,
+    "temp_min": None,
+    "temp_max": None,
+    "temp_min_2h": None,
+    "temp_max_2h": None,
+    "comp_status": "Okänd",
+    "voltage": None,
+    "current": None,
+    "power": None,
+    "mem_free_kb": None,
+    "mem_used_kb": None,
+    "time_str": "",
+}
+
+
+
 # === INA260 setup (I2C på GP4/GP5) ===
 i2c = I2C(1, scl=Pin(27), sda=Pin(26), freq=400000)
 INA260_ADDR = 0x40
@@ -87,13 +107,50 @@ def read_power():
     return raw * 10 / 1000.0
 
 
+async def wifi_connect(ssid, password, timeout=20):
+    if not wlan.isconnected():
+        print("Ansluter till WiFi...")
+        wlan.connect(ssid, password)
+        for _ in range(timeout):
+            if wlan.isconnected():
+                break
+            await asyncio.sleep(1)
+        if wlan.isconnected():
+            print("✅ Ansluten till WiFi!")
+            print("IP-adress:", wlan.ifconfig()[0])
+            await tiden.sync_time()
+        else:
+            print("❌ Kunde inte ansluta till WiFi.")
+    else:
+        print("Redan ansluten:", wlan.ifconfig()[0])
+        await tiden.sync_time()
+
+async def monitor_wifi():
+    """Kontrollerar regelbundet WiFi-status och återansluter vid behov."""
+    while True:
+        if not wlan.isconnected():
+            print("⚠️  WiFi tappat! Försöker återansluta...")
+            wlan.disconnect()
+            await asyncio.sleep(1)
+            await wifi_connect(secret.WIFI_SSID, secret.WIFI_PASSWORD)
+#        else:
+#            print(f"[{time.localtime()[3]:02d}:{time.localtime()[4]:02d}:{time.localtime()[5]:02d}] WiFi OK")
+#        print("Väntar", secret.CHECK_INTERVAL_WIFI, "sekunder innan nästa wifi koll")
+        task_handler.feed_health("app_main.monitor_wifi")
+        await asyncio.sleep(secret.CHECK_INTERVAL_WIFI)
+
+
+
+
+
 
 async def update_temp_history(current_temp):
     global temp_history, temp_24h_min, temp_24h_max, led_green
 
     temp_history.append(current_temp)
-    if len(temp_history) > MAXLEN:
+    if len(temp_history) > secret.MAXLEN:
         temp_history.pop(0)
+        gc.collect()
         led_green.duty_u16(20000)
 
 # Beräkna min och max om listan inte är tom
@@ -101,9 +158,9 @@ async def update_temp_history(current_temp):
         temp_24h_min = min(temp_history)
         temp_24h_max = max(temp_history)
         
-    print("Current_temp:", current_temp)
-    print("min_temp:", temp_24h_min)
-    print("max_temp:", temp_24h_max)
+#    print("Current_temp:", current_temp)
+#    print("min_temp:", temp_24h_min)
+#    print("max_temp:", temp_24h_max)
 
 
 
@@ -112,9 +169,22 @@ async def update_temp_history(current_temp):
 # === Display-uppdatering ===
 async def update_display():
     global alarm_visible, use_gpio_10, control_output_state_9, control_output_state_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
-    global temperature_c, temp_24h_min, temp_24h_max, led_red, led_green, led_blue
+    global temperature_c, temp_24h_min, temp_24h_max, led_red, led_green, led_blue, DISPLAY_DATA
     display.set_font("bitmap8")
 
+    temperature_c = 0
+    min_th = 0
+    max_th = 0
+    temp_24h_min = 0
+    temp_24h_max = 0
+    comp_str = "Okänd"
+    voltage = 0
+    current = 0
+    power = 0
+    mem_free = 0
+    mem_alloc = 0
+    time_str = ""
+        
     while True:
 
         if trigger_pin_14.value() == 0 and backlight_pin_20.value() == 1:
@@ -135,6 +205,7 @@ async def update_display():
         display.set_pen(WHITE)
         x = (320 - display.measure_text(time_str, scale=3)) // 2
         display.text(time_str, x, 1, scale=3)
+        
 
         # Temperatur
         if temperature_c is not None:
@@ -239,7 +310,7 @@ async def update_display():
         x = (320 - display.measure_text(ina_text, scale=2)) // 2
         display.set_pen(WHITE)
         display.text(ina_text, x, 200, scale=2)
-        print("INA260 ->", ina_text)
+#        print("INA260 ->", ina_text)
 
         # Minnesinfo
         gc.collect()
@@ -261,6 +332,27 @@ async def update_display():
 
         display.update()
         alarm_visible = not alarm_visible
+        task_handler.feed_health("app_main.update_display")
+
+
+
+        DISPLAY_DATA.update({
+            "temperature": temperature_c,
+            "temp_min": min_th,
+            "temp_max": max_th,
+            "temp_min_2h": temp_24h_min,
+            "temp_max_2h": temp_24h_max,
+            "comp_status": comp_str,
+            "voltage": voltage,
+            "current": current,
+            "power": power,
+            "mem_free_kb": mem_free // 1024,
+            "mem_used_kb": mem_alloc // 1024,
+            "time_str": time_str,
+        })
+
+
+
         await asyncio.sleep(0.2)
 
 # === Temperaturmätning (endast trigger 12) ===
@@ -291,13 +383,13 @@ async def read_temperature():
             if roms:
                 temperature_c = ds_sensor.read_temp(roms[0])
                 await update_temp_history(temperature_c)
-                print("Temperatur: {:.2f}°C   Use GPIO10: {}".format(temperature_c, use_gpio_10))
+#                print("Temperatur: {:.2f}°C   Use GPIO10: {}".format(temperature_c, use_gpio_10))
 
                 # Trigger from GPIO12
-                print("Kyla : ", trigger_pin_12.value())
-                print("Stat : ", trigger_pin_13.value())
-                print("Lyse : ", trigger_pin_14.value())
-                print("Uppd : ", trigger_pin_15.value())
+#                print("Kyla : ", trigger_pin_12.value())
+#                print("Stat : ", trigger_pin_13.value())
+#                print("Lyse : ", trigger_pin_14.value())
+#                print("Uppd : ", trigger_pin_15.value())
                 
                 if trigger_pin_12.value() == 0 and control_output_state_9:
                     print("\n\n\nTrigger GPIO12 och GPIO9 är ON ⇒ byter till GPIO10\n\n\n")
@@ -332,10 +424,18 @@ async def read_temperature():
 
         except Exception as e:
             print("Temp‑fel:", e)
+            
+        task_handler.feed_health("app_main.read_temperature")
 
         await asyncio.sleep(1.25)
 
 # === Main ===
 async def main():
-    task_handler.create_managed_task(update_display())
-    task_handler.create_managed_task(read_temperature())
+    task_handler.create_managed_task(update_display(), "app_main.update_display")
+    task_handler.create_managed_task(read_temperature(), "app_main.read_temperature")
+    
+
+
+    while True:
+        task_handler.feed_health("app_main.main")
+        await asyncio.sleep(5)
