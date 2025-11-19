@@ -10,6 +10,7 @@ def checksum(data):
     s = sum(struct.unpack("!%dH" % (len(data) // 2), data))
     s = (s >> 16) + (s & 0xffff)
     s = s + (s >> 16)
+    gc.collect()
     return ~s & 0xffff
 
 def ping(host, timeout=2000, size=32):
@@ -39,4 +40,3 @@ def ping(host, timeout=2000, size=32):
     except:
         gc.collect()
         return False
-
