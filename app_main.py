@@ -9,7 +9,10 @@ from collections import deque
 import onewire, ds18x20
 import secret # inställningar
 import task_handler
-import tiden
+import time_handler
+import web_server
+import ota
+import uping
 
 wlan = network.WLAN(network.STA_IF)
 wlan.active(True)
@@ -118,12 +121,12 @@ async def wifi_connect(ssid, password, timeout=20):
         if wlan.isconnected():
             print("✅ Ansluten till WiFi!")
             print("IP-adress:", wlan.ifconfig()[0])
-            await tiden.sync_time()
+            await time_handler.sync_time()
         else:
             print("❌ Kunde inte ansluta till WiFi.")
     else:
         print("Redan ansluten:", wlan.ifconfig()[0])
-        await tiden.sync_time()
+        await time_handler.sync_time()
 
 async def monitor_wifi():
     """Kontrollerar regelbundet WiFi-status och återansluter vid behov."""
@@ -140,10 +143,6 @@ async def monitor_wifi():
         await asyncio.sleep(secret.CHECK_INTERVAL_WIFI)
 
 
-
-
-
-
 async def update_temp_history(current_temp):
     global temp_history, temp_24h_min, temp_24h_max, led_green
 
@@ -158,13 +157,6 @@ async def update_temp_history(current_temp):
         temp_24h_min = min(temp_history)
         temp_24h_max = max(temp_history)
         
-#    print("Current_temp:", current_temp)
-#    print("min_temp:", temp_24h_min)
-#    print("max_temp:", temp_24h_max)
-
-
-
-
 
 # === Display-uppdatering ===
 async def update_display():
@@ -184,6 +176,9 @@ async def update_display():
     mem_free = 0
     mem_alloc = 0
     time_str = ""
+    
+    local_ver = None
+    github_ver = None
         
     while True:
 
@@ -200,7 +195,7 @@ async def update_display():
         display.clear()
 
         # Tid
-        t = tiden.get_swedish_time_tuple()
+        t = time_handler.get_swedish_time_tuple()
         time_str = ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(*t[:6]))
         display.set_pen(WHITE)
         x = (320 - display.measure_text(time_str, scale=3)) // 2
@@ -256,39 +251,78 @@ async def update_display():
 
 
 
-
+            if trigger_pin_15.value() == 1:
 
             
-            # Styr Min
-            minmax_str = f"Styr Min: {min_th:.2f}°C"
-            x = (320 - display.measure_text(minmax_str, scale=2)) // 2
-            display.set_pen(WHITE)
-            display.text(minmax_str, x, 90, scale=2)
-            
-            # Styr Max
-            minmax_str = f"Styr Max: {max_th:.2f}°C"
-            x = (320 - display.measure_text(minmax_str, scale=2)) // 2
-            display.set_pen(WHITE)
-            display.text(minmax_str, x, 110, scale=2)
+                # Styr Min
+                minmax_str = f"Styr Min: {min_th:.2f}°C"
+                x = (320 - display.measure_text(minmax_str, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(minmax_str, x, 90, scale=2)
+                
+                # Styr Max
+                minmax_str = f"Styr Max: {max_th:.2f}°C"
+                x = (320 - display.measure_text(minmax_str, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(minmax_str, x, 110, scale=2)
 
 
-            # 24h Min
-            if temp_24h_min is not None:
-                minmax_str = f"2h Min: {temp_24h_min:.2f}°C"
+                # 24h Min
+                if temp_24h_min is not None:
+                    minmax_str = f"2h Min: {temp_24h_min:.2f}°C"
+                else:
+                    minmax_str = "2h Min: --°C"
+                x = (320 - display.measure_text(minmax_str, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(minmax_str, x, 130, scale=2)
+                
+                # 24h Max
+                if temp_24h_max is not None:
+                    minmax_str = f"2h Max: {temp_24h_max:.2f}°C"
+                else:
+                    minmax_str = "2h Max: --°C"
+                x = (320 - display.measure_text(minmax_str, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(minmax_str, x, 150, scale=2)
+                
+                if local_ver != None:
+                    local_ver = None
+
+                if github_ver != None:
+                    github_ver = None
+
             else:
-                minmax_str = "2h Min: --°C"
-            x = (320 - display.measure_text(minmax_str, scale=2)) // 2
-            display.set_pen(WHITE)
-            display.text(minmax_str, x, 130, scale=2)
-            
-            # 24h Max
-            if temp_24h_max is not None:
-                minmax_str = f"2h Max: {temp_24h_max:.2f}°C"
-            else:
-                minmax_str = "2h Max: --°C"
-            x = (320 - display.measure_text(minmax_str, scale=2)) // 2
-            display.set_pen(WHITE)
-            display.text(minmax_str, x, 150, scale=2)
+
+                # Uptiden
+                uptime_str = web_server.get_uptime()
+                x = (320 - display.measure_text(uptime_str, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(uptime_str, x, 90, scale=2)
+                
+                # Tasks
+                tasks_str = f"{task_handler.running_tasks()} körs, omstart {task_handler.restarted_nr}"
+                x = (320 - display.measure_text(tasks_str, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(tasks_str, x, 110, scale=2)
+
+
+                # Local ver
+                if local_ver == None:
+                    local_ver = "Local : " + ota.get_local_version()
+                x = (320 - display.measure_text(local_ver, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(local_ver, x, 130, scale=2)
+                
+                # Git ver
+                if github_ver == None:
+                    if uping.ping("1.1.1.1"):
+                        github_ver = "Github : " + ota.get_remote_version_status()
+                    else:
+                        github_ver = "Github : inget internet!!!"
+
+                x = (320 - display.measure_text(github_ver, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(github_ver, x, 150, scale=2)
             
 
             # Larm 
