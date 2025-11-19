@@ -136,10 +136,9 @@ async def monitor_wifi():
             wlan.disconnect()
             await asyncio.sleep(1)
             await wifi_connect(secret.WIFI_SSID, secret.WIFI_PASSWORD)
-#        else:
-#            print(f"[{time.localtime()[3]:02d}:{time.localtime()[4]:02d}:{time.localtime()[5]:02d}] WiFi OK")
-#        print("Väntar", secret.CHECK_INTERVAL_WIFI, "sekunder innan nästa wifi koll")
+            
         task_handler.feed_health("app_main.monitor_wifi")
+        gc.collect()
         await asyncio.sleep(secret.CHECK_INTERVAL_WIFI)
 
 
@@ -244,16 +243,9 @@ async def update_display():
                 led_green.duty_u16(65535)
                 led_blue.duty_u16(65535)
 
-                
             display.text(comp_str, x, 60, scale=3)
-            
 
-
-
-
-            if trigger_pin_15.value() == 1:
-
-            
+            if trigger_pin_15.value() == 1: # Visa status knappen
                 # Styr Min
                 minmax_str = f"Styr Min: {min_th:.2f}°C"
                 x = (320 - display.measure_text(minmax_str, scale=2)) // 2
@@ -265,7 +257,6 @@ async def update_display():
                 x = (320 - display.measure_text(minmax_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(minmax_str, x, 110, scale=2)
-
 
                 # 24h Min
                 if temp_24h_min is not None:
@@ -291,7 +282,7 @@ async def update_display():
                 if github_ver != None:
                     github_ver = None
 
-            else:
+            else: #Visar status i stället
 
                 # Uptiden
                 uptime_str = web_server.get_uptime()
@@ -304,7 +295,6 @@ async def update_display():
                 x = (320 - display.measure_text(tasks_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(tasks_str, x, 110, scale=2)
-
 
                 # Local ver
                 if local_ver == None:
@@ -319,11 +309,9 @@ async def update_display():
                         github_ver = "Github : " + ota.get_remote_version_status()
                     else:
                         github_ver = "Github : inget internet!!!"
-
                 x = (320 - display.measure_text(github_ver, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(github_ver, x, 150, scale=2)
-            
 
             # Larm 
             if temperature_c >= TEMP_ALARM_THRESHOLD and alarm_visible:
@@ -344,7 +332,6 @@ async def update_display():
         x = (320 - display.measure_text(ina_text, scale=2)) // 2
         display.set_pen(WHITE)
         display.text(ina_text, x, 200, scale=2)
-#        print("INA260 ->", ina_text)
 
         # Minnesinfo
         gc.collect()
@@ -362,13 +349,8 @@ async def update_display():
         display.text("Uppd", 0, 182, scale=2)
         display.text("Stat", 280, 182, scale=2)
 
-
-
         display.update()
         alarm_visible = not alarm_visible
-        task_handler.feed_health("app_main.update_display")
-
-
 
         DISPLAY_DATA.update({
             "temperature": temperature_c,
@@ -384,9 +366,9 @@ async def update_display():
             "mem_used_kb": mem_alloc // 1024,
             "time_str": time_str,
         })
-
-
-
+        
+        task_handler.feed_health("app_main.update_display")
+        gc.collect()
         await asyncio.sleep(0.2)
 
 # === Temperaturmätning (endast trigger 12) ===
@@ -417,13 +399,6 @@ async def read_temperature():
             if roms:
                 temperature_c = ds_sensor.read_temp(roms[0])
                 await update_temp_history(temperature_c)
-#                print("Temperatur: {:.2f}°C   Use GPIO10: {}".format(temperature_c, use_gpio_10))
-
-                # Trigger from GPIO12
-#                print("Kyla : ", trigger_pin_12.value())
-#                print("Stat : ", trigger_pin_13.value())
-#                print("Lyse : ", trigger_pin_14.value())
-#                print("Uppd : ", trigger_pin_15.value())
                 
                 if trigger_pin_12.value() == 0 and control_output_state_9:
                     print("\n\n\nTrigger GPIO12 och GPIO9 är ON ⇒ byter till GPIO10\n\n\n")
@@ -460,7 +435,7 @@ async def read_temperature():
             print("Temp‑fel:", e)
             
         task_handler.feed_health("app_main.read_temperature")
-
+        gc.collect()
         await asyncio.sleep(1.25)
 
 # === Main ===
@@ -469,7 +444,7 @@ async def main():
     task_handler.create_managed_task(read_temperature(), "app_main.read_temperature")
     
 
-
     while True:
         task_handler.feed_health("app_main.main")
+        gc.collect()
         await asyncio.sleep(5)
