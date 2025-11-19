@@ -43,6 +43,11 @@ def get_remote_version():
     exec(raw.decode(), ns)
     return ns.get("VERSION", None), raw
 
+def get_remote_version_status():
+    raw = download_file_from_github("version.py")
+    ns = {}
+    exec(raw.decode(), ns)
+    return ns.get("VERSION", None)
 # ============
 # OTA logic
 # ============
