@@ -71,4 +71,3 @@ async def periodic_time_sync(hours=6):
         task_handler.feed_health("tiden.periodic_time_sync")
         gc.collect()
         await sync_time()
-
