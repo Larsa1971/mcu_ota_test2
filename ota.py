@@ -18,6 +18,7 @@ def github_get(url):
         raise RuntimeError("HTTP %s: %s" % (r.status_code, txt))
     data = r.json()
     r.close()
+    gc.collect()
     return data
 
 def download_file_from_github(filepath):
@@ -25,6 +26,7 @@ def download_file_from_github(filepath):
     data = github_get(url)
     if "content" not in data:
         raise RuntimeError("Ingen 'content' i svar för " + filepath)
+    gc.collect()
     return ubinascii.a2b_base64(data["content"])
 
 # ============
@@ -41,13 +43,16 @@ def get_remote_version():
     raw = download_file_from_github("version.py")
     ns = {}
     exec(raw.decode(), ns)
+    gc.collect()
     return ns.get("VERSION", None), raw
 
 def get_remote_version_status():
     raw = download_file_from_github("version.py")
     ns = {}
     exec(raw.decode(), ns)
+    gc.collect()
     return ns.get("VERSION", None)
+
 # ============
 # OTA logic
 # ============
@@ -89,17 +94,21 @@ async def ota_check():
                     print("Detaljer:", e.args)
                 else:
                     print("Felmeddelande:", e)
+                gc.collect()
 
             except Exception as e:
                 print("Kodfel vid kompilering:", e)
                 if "app_main_new.py" in os.listdir():
                     os.remove("app_main_new.py")
+                gc.collect()
                 return False
 
         else:
             print("Ingen ny version")
+            gc.collect()
     except Exception as e:
         print("OTA error:", e)
+        gc.collect()
 
 async def rollback_if_broken():
     print("Kollar om det finns app_main_old.py kvar")
@@ -117,3 +126,4 @@ async def rollback_if_broken():
             await task_handler.graceful_restart()
     else:
         print("Ingen app_main_old.py finns!")
+    gc.collect()
