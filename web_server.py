@@ -4,6 +4,7 @@ import time
 import task_handler
 import app_main
 import ota
+import gc
 
 start_time = time.ticks_ms()
 
@@ -29,6 +30,7 @@ def get_tasks_status():
             "stale_ms": stale,
             "Upptid" : uptime
         })
+    gc.collect()
     return status_list
 
 def get_status_json():
@@ -41,6 +43,7 @@ def get_status_json():
         "tasks": get_tasks_status(),
         "display": app_main.DISPLAY_DATA
     }
+    gc.collect()
     return (
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/json; charset=utf-8\r\n"
@@ -169,6 +172,7 @@ def get_status_html():
 </body>
 </html>
 """
+    gc.collect()
     return (
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
@@ -212,11 +216,14 @@ async def handle_client(reader, writer, ota_callback=None):
         await writer.awrite(response)
         await writer.drain()
         await writer.aclose()
+        gc.collect()
 
     except Exception as e:
         print("Fel i hantering av klient:", e)
+        gc.collect()
         try:
             await writer.aclose()
+            gc.collect()
         except:
             pass
 
@@ -227,5 +234,5 @@ async def start_web_server(ota_callback=None, host='0.0.0.0', port=80):
 
     while True:
         task_handler.feed_health("web_server.start_web_server")
+        gc.collect()
         await asyncio.sleep(5)
-
