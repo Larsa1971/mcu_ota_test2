@@ -8,7 +8,7 @@ import ota
 start_time = time.ticks_ms()
 
 def get_uptime():
-    return "{:.1f} sek".format(time.ticks_diff(time.ticks_ms(), start_time) / 1000)
+    return "{:.3f} dygn".format(time.ticks_diff(time.ticks_ms(), start_time) / (1000 * 86400))
 
 def get_tasks_status():
     """Returnerar taskstatus som lista av dictar."""
@@ -18,10 +18,16 @@ def get_tasks_status():
         last_health = task_handler.HEALTH.get(name, 0)
         stale = time.ticks_diff(now, last_health)
         status = "Klar" if task.done() else "Körs"
+        
+        start_time = task_handler.HEALTH_START.get(name, 0)
+        uptime = "{:.3f}".format(time.ticks_diff(now, start_time) / (1000 * 86400))
+
+
         status_list.append({
             "name": name,
             "status": status,
-            "stale_ms": stale
+            "stale_ms": stale,
+            "Upptid" : uptime
         })
     return status_list
 
@@ -123,8 +129,8 @@ def get_status_html():
 
     <h2>Tasks</h2>
     <table id="task-table">
-        <thead><tr><th>Namn</th><th>Status</th><th>Health (ms)</th></tr></thead>
-        <tbody id="task-body"><tr><td colspan="3">Laddar...</td></tr></tbody>
+        <thead><tr><th>Namn</th><th>Status</th><th>Health (ms)</th><th>Uptime (days)</th></tr></thead>
+        <tbody id="task-body"><tr><td colspan="4">Laddar...</td></tr></tbody>
     </table>
 
     <script>
@@ -151,7 +157,7 @@ def get_status_html():
                 tbody.innerHTML = '';
                 data.tasks.forEach(t => {{
                     tbody.insertAdjacentHTML('beforeend',
-                        `<tr><td>${{t.name}}</td><td>${{t.status}}</td><td>${{t.stale_ms}}</td></tr>`);
+                        `<tr><td>${{t.name}}</td><td>${{t.status}}</td><td>${{t.stale_ms}}</td><td>${{t.Upptid}}</td></tr>`);
                 }});
             }} catch (e) {{
                 console.log("Fel vid statusuppdatering:", e);
