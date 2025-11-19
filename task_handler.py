@@ -49,11 +49,13 @@ def register_task(task, name):
     TASKS[name] = task
     HEALTH[name] = now            # senaste health-feed
     HEALTH_START[name] = now # starttid i ms
+    gc.collect()
 
 
 def create_managed_task(coro, name = None):
     task = asyncio.create_task(coro)
     register_task(task, name)
+    gc.collect()
     return task
 
 
@@ -61,6 +63,7 @@ def create_managed_task(coro, name = None):
 def feed_health(task_name):
     """Mata health för en task."""
     HEALTH[task_name] = time.ticks_ms()
+    gc.collect()
 
 
 async def monitor_health(interval=10, max_stale_time=120000):
@@ -102,6 +105,7 @@ async def monitor_health(interval=10, max_stale_time=120000):
                     task.cancel()
 
         feed_health("task_handler.monitor_health")
+        gc.collect()
         await asyncio.sleep(interval)
 
 
@@ -109,6 +113,7 @@ async def monitor_health(interval=10, max_stale_time=120000):
 def feed_watchdog():
     global WATCHDOG_LAST_FEED
     WATCHDOG_LAST_FEED = time.ticks_ms()
+    gc.collect()
 
 async def watchdog_monitor(interval=5):
     """Kontrollerar programvaru-watchdog."""
@@ -118,6 +123,7 @@ async def watchdog_monitor(interval=5):
             print(f"⚠️ Watchdog timeout ({delta} ms) - startar om maskinen!")
             await graceful_restart()
         feed_health("task_handler.watchdog_monitor")
+        gc.collect()
         await asyncio.sleep(interval)
 
 
@@ -159,7 +165,8 @@ async def monitor_tasks(interval=15):
                     create_managed_task(monitor_health(interval=10, max_stale_time=60000), "task_handler.monitor_health")
                     restarted_nr += 1
                 
-        feed_health("task_handler.monitor_tasks")                
+        feed_health("task_handler.monitor_tasks")
+        gc.collect()
         await asyncio.sleep(interval)
 
 def running_tasks():
@@ -169,7 +176,5 @@ def running_tasks():
         if not task.done():
             running += 1
         total += 1
-    
+    gc.collect()
     return f"{running} av {total}"
-
-
