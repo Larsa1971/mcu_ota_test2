@@ -10,7 +10,8 @@ import app_main
 
 print("main.py körs")
 time.sleep(1)
-
+gc.collect()
+gc.enable()
 
 
 async def main():
@@ -36,6 +37,7 @@ async def main():
     
     while True:
         task_handler.feed_watchdog()
+        gc.collect()
         await asyncio.sleep(5)
 
 
