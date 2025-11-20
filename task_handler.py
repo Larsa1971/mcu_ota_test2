@@ -155,7 +155,11 @@ async def monitor_tasks(interval=15):
                 del HEALTH_START[name]
                 gc.collect()
                 
-                if name == "app_main.monitor_wifi":
+                if name == "app_main.main":
+                    create_managed_task(app_main.main(), "app_main.main")
+                    restarted_nr += 1
+                    
+                elif name == "app_main.monitor_wifi":
                     create_managed_task(app_main.monitor_wifi(), "app_main.monitor_wifi")
                     restarted_nr += 1
 
