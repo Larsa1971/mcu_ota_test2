@@ -33,7 +33,6 @@ async def main():
     task_handler.create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
 
     while True:
-        task_handler.feed_watchdog()
         gc.collect()
         await asyncio.sleep(5)
 
