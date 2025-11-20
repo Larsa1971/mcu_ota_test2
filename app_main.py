@@ -285,7 +285,7 @@ async def update_display():
             else: #Visar status i stället
 
                 # Uptiden
-                uptime_str = web_server.get_uptime()
+                uptime_str = web_server.get_uptime() + " " + wlan.ifconfig()[0]
                 x = (320 - display.measure_text(uptime_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(uptime_str, x, 90, scale=2)
