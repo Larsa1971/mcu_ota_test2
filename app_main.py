@@ -441,10 +441,21 @@ async def read_temperature():
 # === Main ===
 async def main():
     
-# lägga in koll om app_main.main() kraschat och startat om.. så dessa inte startas igen!!!!
-    task_handler.create_managed_task(read_temperature(), "app_main.read_temperature")
-    task_handler.create_managed_task(update_display(), "app_main.update_display")
-    
+# Checka om app_main.mai startats om, starta tasks om det inte körs
+    task1 = True
+    task2 = True
+
+    for name, _ in list(task_handler.TASKS.items()):
+        if name == "app_main.read_temperature":
+            task1 = False
+            
+        elif name == "app_main.update_display":
+            task2 = False
+
+    if task1:
+        task_handler.create_managed_task(read_temperature(), "app_main.read_temperature")
+    if task2:
+        task_handler.create_managed_task(update_display(), "app_main.update_display")
 
     while True:
         task_handler.feed_health("app_main.main")
