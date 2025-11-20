@@ -24,6 +24,9 @@ wlan.active(True)
 
 
 async def graceful_restart():
+    global TASKS
+    global HEALTH
+    global HEALTH_START
     """Stoppa alla tasks och starta om maskinen."""
     print("🧹 Stoppar alla tasks...")
     for name, task in list(TASKS.items()):
@@ -44,6 +47,9 @@ async def graceful_restart():
 
 
 def register_task(task, name):
+    global TASKS
+    global HEALTH
+    global HEALTH_START
     """Registrera nya tasks så att de kan stoppas vid restart."""
     now = time.ticks_ms()
     TASKS[name] = task
@@ -61,6 +67,7 @@ def create_managed_task(coro, name = None):
 
 # === Hälsokontroll ===
 def feed_health(task_name):
+    global HEALTH
     """Mata health för en task."""
     HEALTH[task_name] = time.ticks_ms()
     gc.collect()
@@ -68,6 +75,9 @@ def feed_health(task_name):
 
 async def monitor_health(interval=10, max_stale_time=120000):
     global restarted_nr
+    global TASKS
+    global HEALTH
+    global HEALTH_START
     """Kontrollerar om tasks inte matat health på länge."""
     while True:
         now = time.ticks_ms()
@@ -77,7 +87,7 @@ async def monitor_health(interval=10, max_stale_time=120000):
             if name == "task_handler.monitor_tasks" and delta > max_stale_time:
                 print(f"⚠️ [{time.localtime()[3]:02d}:{time.localtime()[4]:02d}:{time.localtime()[5]:02d}] Health stale för task '{name}' ({delta} ms), restarting task...")
 
-                task = HEALTH.get(name)
+                task = TASKS.get(name)
                 if task:
                     task.cancel()
                     await asyncio.sleep(0)  # låt tasks rensa upp
@@ -91,14 +101,14 @@ async def monitor_health(interval=10, max_stale_time=120000):
                 restarted_nr += 1
 
 
-            elif name != "tiden.periodic_time_sync" and delta > max_stale_time:
+            elif name != "time_handler.periodic_time_sync" and delta > max_stale_time:
                 print(f"⚠️ [{time.localtime()[3]:02d}:{time.localtime()[4]:02d}:{time.localtime()[5]:02d}] Health stale för task '{name}' ({delta} ms), killing task...")
                 task = TASKS.get(name)
                 if task:
                     task.cancel()
 
                     
-            elif name == "tiden.periodic_time_sync" and delta > (secret.TIME_SYNC_REPEAT * 60 * 60 * 1000):
+            elif name == "time_handler.periodic_time_sync" and delta > (secret.TIME_SYNC_REPEAT * 60 * 60 * 1000):
                 print(f"⚠️ [{time.localtime()[3]:02d}:{time.localtime()[4]:02d}:{time.localtime()[5]:02d}] Health stale för task '{name}' ({delta} ms), Killing task...")
                 task = TASKS.get(name)
                 if task:
@@ -116,6 +126,7 @@ def feed_watchdog():
     gc.collect()
 
 async def watchdog_monitor(interval=5):
+    global WATCHDOG_LAST_FEED
     """Kontrollerar programvaru-watchdog."""
     while True:
         delta = time.ticks_diff(time.ticks_ms(), WATCHDOG_LAST_FEED)
@@ -131,6 +142,9 @@ async def watchdog_monitor(interval=5):
 # === Task-övervakning ===
 async def monitor_tasks(interval=15):
     global restarted_nr
+    global TASKS
+    global HEALTH
+    global HEALTH_START
     """Övervakar att tasks fortfarande körs och startar om om de kraschar."""
     while True:
         for name, task in list(TASKS.items()):
@@ -149,7 +163,7 @@ async def monitor_tasks(interval=15):
                     create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
                     restarted_nr += 1
                     
-                elif name == "tiden.periodic_time_sync":
+                elif name == "time_handler.periodic_time_sync":
                     create_managed_task(time_handler.periodic_time_sync(hours=secret.TIME_SYNC_REPEAT), "time_handler.periodic_time_sync")
                     restarted_nr += 1
                     
