@@ -440,8 +440,8 @@ async def read_temperature():
 
 # === Main ===
 async def main():
-    task_handler.create_managed_task(update_display(), "app_main.update_display")
     task_handler.create_managed_task(read_temperature(), "app_main.read_temperature")
+    task_handler.create_managed_task(update_display(), "app_main.update_display")
     
 
     while True:
