@@ -9,13 +9,13 @@ import gc
 start_time = time.ticks_ms()
 
 def get_uptime():
-    return "{:.3f} dygn".format(time.ticks_diff(time.ticks_ms(), start_time) / (1000 * 86400))
+    return "{:.3f} days".format(time.ticks_diff(time.ticks_ms(), start_time) / (1000 * 86400))
 
 def get_tasks_status():
     """Returnerar taskstatus som lista av dictar."""
     now = time.ticks_ms()
     status_list = []
-    for name, task in task_handler.TASKS.items():
+    for name, task in sorted(task_handler.TASKS.items(), key=lambda x: x[0]):
         last_health = task_handler.HEALTH.get(name, 0)
         stale = time.ticks_diff(now, last_health)
         status = "Klar" if task.done() else "Körs"
@@ -62,7 +62,7 @@ def get_status_html():
 <html lang="sv">
 <head>
 <meta charset="utf-8" />
-<title>Pico W Status</title>
+<title>Kylskåpet Status</title>
 <style>
     body {{ font-family: sans-serif; padding: 20px; background:#f0f0f0; }}
     h1, h2 {{ color: #333; }}
@@ -106,7 +106,7 @@ def get_status_html():
 </style>
 </head>
 <body>
-    <h1>Pico W Status</h1>
+    <h1>Kylskåpet Status</h1>
     <p><strong>IP-adress:</strong> {ip}</p>
     <p><strong>Uptime:</strong> <span id="uptime">{uptime}</span></p>
 
@@ -118,11 +118,11 @@ def get_status_html():
         <tbody>
             <tr><td class="label">Tid</td><td class="value" id="d_time">{d['time_str']}</td></tr>
             <tr><td class="label">Temperatur</td><td class="value" id="d_temp">{d['temperature']} °C</td></tr>
-            <tr><td class="label">Kompressor</td><td class="value" id="d_comp">{d['comp_status']}</td></tr>
             <tr><td class="label">Min (Styr)</td><td class="value" id="d_min">{d['temp_min']} °C</td></tr>
             <tr><td class="label">Max (Styr)</td><td class="value" id="d_max">{d['temp_max']} °C</td></tr>
             <tr><td class="label">Min (2h)</td><td class="value" id="d_min_2h">{d['temp_min_2h']} °C</td></tr>
             <tr><td class="label">Max (2h)</td><td class="value" id="d_max_2h">{d['temp_max_2h']} °C</td></tr>
+            <tr><td class="label">Kompressor</td><td class="value" id="d_comp">{d['comp_status']}</td></tr>
             <tr><td class="label">Spänning</td><td class="value" id="d_v">{d['voltage']} V</td></tr>
             <tr><td class="label">Ström</td><td class="value" id="d_i">{d['current']} A</td></tr>
             <tr><td class="label">Effekt</td><td class="value" id="d_p">{d['power']} W</td></tr>
@@ -132,7 +132,7 @@ def get_status_html():
 
     <h2>Tasks</h2>
     <table id="task-table">
-        <thead><tr><th>Namn</th><th>Status</th><th>Health (ms)</th><th>Uptime (days)</th></tr></thead>
+        <thead><tr><th>Name</th><th>Status</th><th>Health (ms)</th><th>Uptime (days)</th></tr></thead>
         <tbody id="task-body"><tr><td colspan="4">Laddar...</td></tr></tbody>
     </table>
 
@@ -146,11 +146,11 @@ def get_status_html():
                 if (d) {{
                     document.getElementById('d_time').innerText = d.time_str || '';
                     document.getElementById('d_temp').innerText = (d.temperature?.toFixed(2) || '--') + ' °C';
-                    document.getElementById('d_comp').innerText = d.comp_status || '--';
                     document.getElementById('d_min').innerText = (d.temp_min?.toFixed(2) || '--') + ' °C';
                     document.getElementById('d_max').innerText = (d.temp_max?.toFixed(2) || '--') + ' °C';
                     document.getElementById('d_min_2h').innerText = (d.temp_min_2h?.toFixed(2) || '--') + ' °C';
                     document.getElementById('d_max_2h').innerText = (d.temp_max_2h?.toFixed(2) || '--') + ' °C';
+                    document.getElementById('d_comp').innerText = d.comp_status || '--';
                     document.getElementById('d_v').innerText = (d.voltage?.toFixed(2) || '--') + ' V';
                     document.getElementById('d_i').innerText = (d.current?.toFixed(2) || '--') + ' A';
                     document.getElementById('d_p').innerText = (d.power?.toFixed(2) || '--') + ' W';
@@ -236,3 +236,4 @@ async def start_web_server(ota_callback=None, host='0.0.0.0', port=80):
         task_handler.feed_health("web_server.start_web_server")
         gc.collect()
         await asyncio.sleep(5)
+
