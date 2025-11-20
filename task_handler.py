@@ -125,7 +125,7 @@ def feed_watchdog():
     WATCHDOG_LAST_FEED = time.ticks_ms()
     gc.collect()
 
-async def watchdog_monitor(interval=5):
+async def monitor_watchdog(interval=5):
     global WATCHDOG_LAST_FEED
     """Kontrollerar programvaru-watchdog."""
     while True:
@@ -133,7 +133,7 @@ async def watchdog_monitor(interval=5):
         if delta > WATCHDOG_TIMEOUT_MS:
             print(f"⚠️ Watchdog timeout ({delta} ms) - startar om maskinen!")
             await graceful_restart()
-        feed_health("task_handler.watchdog_monitor")
+        feed_health("task_handler.monitor_watchdog")
         gc.collect()
         await asyncio.sleep(interval)
 
@@ -178,7 +178,12 @@ async def monitor_tasks(interval=15):
                 elif name == "task_handler.monitor_health":
                     create_managed_task(monitor_health(interval=10, max_stale_time=60000), "task_handler.monitor_health")
                     restarted_nr += 1
-                
+
+                elif name == "ask_handler.monitor_watchdog":
+                    create_managed_task(task_handler.monitor_watchdog(interval=5), name="task_handler.monitor_watchdog")
+                    restarted_nr += 1
+
+
         feed_health("task_handler.monitor_tasks")
         gc.collect()
         await asyncio.sleep(interval)
@@ -192,3 +197,5 @@ def running_tasks():
         total += 1
     gc.collect()
     return f"{running} av {total}"
+
+
