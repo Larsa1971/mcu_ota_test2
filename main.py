@@ -31,7 +31,7 @@ async def main():
 
     task_handler.create_managed_task(task_handler.monitor_tasks(interval=15), name="task_handler.monitor_tasks")
     task_handler.create_managed_task(task_handler.monitor_health(interval=10, max_stale_time=120000), name="task_handler.monitor_health")
-    task_handler.create_managed_task(task_handler.watchdog_monitor(interval=5), name="task_handler.watchdog_monitor")
+    task_handler.create_managed_task(task_handler.monitor_watchdog(interval=5), name="task_handler.monitor_watchdog")
     
     
     
