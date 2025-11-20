@@ -440,11 +440,14 @@ async def read_temperature():
 
 # === Main ===
 async def main():
+    
+# lägga in koll om app_main.main() kraschat och startat om.. så dessa inte startas igen!!!!
     task_handler.create_managed_task(read_temperature(), "app_main.read_temperature")
     task_handler.create_managed_task(update_display(), "app_main.update_display")
     
 
     while True:
         task_handler.feed_health("app_main.main")
+        task_handler.feed_watchdog()
         gc.collect()
         await asyncio.sleep(5)
