@@ -179,7 +179,7 @@ async def monitor_tasks(interval=15):
                     create_managed_task(monitor_health(interval=10, max_stale_time=60000), "task_handler.monitor_health")
                     restarted_nr += 1
 
-                elif name == "ask_handler.monitor_watchdog":
+                elif name == "task_handler.monitor_watchdog":
                     create_managed_task(task_handler.monitor_watchdog(interval=5), name="task_handler.monitor_watchdog")
                     restarted_nr += 1
 
