@@ -159,20 +159,12 @@ async def monitor_tasks(interval=15):
                     create_managed_task(app_main.monitor_wifi(), "app_main.monitor_wifi")
                     restarted_nr += 1
 
-                elif name == "web_server.start_web_server":
-                    create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
-                    restarted_nr += 1
-                    
-                elif name == "time_handler.periodic_time_sync":
-                    create_managed_task(time_handler.periodic_time_sync(hours=secret.TIME_SYNC_REPEAT), "time_handler.periodic_time_sync")
-                    restarted_nr += 1
-                    
-                elif name == "app_main.update_display":
-                    create_managed_task(app_main.update_display(), "app_main.update_display")
-                    restarted_nr += 1
-
                 elif name == "app_main.read_temperature":
                     create_managed_task(app_main.read_temperature(), "app_main.read_temperature")
+                    restarted_nr += 1
+
+                elif name == "app_main.update_display":
+                    create_managed_task(app_main.update_display(), "app_main.update_display")
                     restarted_nr += 1
 
                 elif name == "task_handler.monitor_health":
@@ -183,6 +175,13 @@ async def monitor_tasks(interval=15):
                     create_managed_task(task_handler.monitor_watchdog(interval=5), name="task_handler.monitor_watchdog")
                     restarted_nr += 1
 
+                elif name == "time_handler.periodic_time_sync":
+                    create_managed_task(time_handler.periodic_time_sync(hours=secret.TIME_SYNC_REPEAT), "time_handler.periodic_time_sync")
+                    restarted_nr += 1
+                    
+                elif name == "web_server.start_web_server":
+                    create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
+                    restarted_nr += 1
 
         feed_health("task_handler.monitor_tasks")
         gc.collect()
