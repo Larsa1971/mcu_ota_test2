@@ -24,17 +24,14 @@ async def main():
     # ota check vid start
     await ota.ota_check()
     
-    task_handler.create_managed_task(app_main.monitor_wifi(), "app_main.monitor_wifi")
-    task_handler.create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
-    task_handler.create_managed_task(time_handler.periodic_time_sync(hours=secret.TIME_SYNC_REPEAT), "time_handler.periodic_time_sync")
     task_handler.create_managed_task(app_main.main(), "app_main.main")
-
-    task_handler.create_managed_task(task_handler.monitor_tasks(interval=15), name="task_handler.monitor_tasks")
+    task_handler.create_managed_task(app_main.monitor_wifi(), "app_main.monitor_wifi")
     task_handler.create_managed_task(task_handler.monitor_health(interval=10, max_stale_time=120000), name="task_handler.monitor_health")
+    task_handler.create_managed_task(task_handler.monitor_tasks(interval=15), name="task_handler.monitor_tasks")
     task_handler.create_managed_task(task_handler.monitor_watchdog(interval=5), name="task_handler.monitor_watchdog")
-    
-    
-    
+    task_handler.create_managed_task(time_handler.periodic_time_sync(hours=secret.TIME_SYNC_REPEAT), "time_handler.periodic_time_sync")
+    task_handler.create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
+
     while True:
         task_handler.feed_watchdog()
         gc.collect()
