@@ -4,10 +4,11 @@ import time
 import uasyncio as asyncio
 import task_handler
 
-start_time = time.ticks_ms()
+start_time_ms = time.ticks_ms()
+start_time_s = 0
 
 def get_uptime():
-    return "{:.2f} dygn".format(time.ticks_diff(time.ticks_ms(), start_time) / (1000 * 86400))
+    return "{:.2f} dygn".format(time.ticks_diff(time.ticks_ms(), start_time_ms) / (1000 * 86400))
 
 
 # ------------------------------
@@ -42,6 +43,7 @@ def get_swedish_time_tuple():
     return t
 
 async def sync_time(retries=5, interval=5):
+    global start_time_s
     for attempt in range(1, retries + 1):
         try:
             print(f"🌐 Synkar tid (försök {attempt}/{retries})...")
@@ -49,6 +51,8 @@ async def sync_time(retries=5, interval=5):
             t = get_swedish_time_tuple()
             print("✅ Svensk tid:", "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(*t[:6]))
             gc.collect()
+            if start_time_s == 0:
+                start_time_s = time.time()
             return True
         except Exception as e:
             print("❌ Misslyckades:", e)
@@ -65,9 +69,9 @@ async def periodic_time_sync(hours=6):
     while True:
 #        print("Väntar sekunder :", hours * 3600, "skunder innan nästa koll")
 
-        task_handler.feed_health("tiden.periodic_time_sync")
+        task_handler.feed_health("time_handler.periodic_time_sync")
         gc.collect()
         await asyncio.sleep(hours * 3600)
-        task_handler.feed_health("tiden.periodic_time_sync")
+        task_handler.feed_health("time_handler.periodic_time_sync")
         gc.collect()
         await sync_time()
