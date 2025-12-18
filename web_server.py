@@ -2,43 +2,68 @@ import uasyncio as asyncio
 import network
 import time
 import task_handler
+import time_handler
 import app_main
 import ota
 import gc
+import secret
 
-start_time = time.ticks_ms()
+# ÄNDRING: använd time.time() i stället för ticks_ms()
+start_time = time.localtime()
 
 def get_uptime():
-    return "{:.3f} days".format(time.ticks_diff(time.ticks_ms(), start_time) / (1000 * 86400))
+    # ÄNDRING: uptime beräknas i sekunder -> dagar
+    elapsed_seconds = time.time() - time_handler.start_time_s
+    return "{:.3f} days".format(elapsed_seconds / 86400)
+
+def get_start_time_str():
+    """
+    Returnerar starttiden i formatet 'YYYY-MM-DD HH:MM:SS'.
+    Försöker använda time_handler.start_time_s, annars fallback till local start_time.
+    """
+    try:
+        utc = time.localtime(time_handler.start_time_s)
+    except AttributeError:
+        utc = start_time
+    
+    offset = 2 if time_handler.is_summer_time(*utc[:3]) else 1
+    t = time.localtime(time.mktime(utc) + offset * 3600)
+
+    return "%04d-%02d-%02d %02d:%02d:%02d" % (t[0], t[1], t[2], t[3], t[4], t[5])
 
 def get_tasks_status():
     """Returnerar taskstatus som lista av dictar."""
-    now = time.ticks_ms()
+    now_ms = time.ticks_ms()
+    now_s = time.time()
+
     status_list = []
     for name, task in sorted(task_handler.TASKS.items(), key=lambda x: x[0]):
         last_health = task_handler.HEALTH.get(name, 0)
-        stale = time.ticks_diff(now, last_health)
-        status = "Klar" if task.done() else "Körs"
-        
-        start_time = task_handler.HEALTH_START.get(name, 0)
-        uptime = "{:.3f}".format(time.ticks_diff(now, start_time) / (1000 * 86400))
+        stale = time.ticks_diff(now_ms, last_health)
 
+        status = "Klar" if task.done() else "Körs"
+
+        start_s = task_handler.HEALTH_START.get(name, None)
+        if start_s is None or start_s == 0:
+            uptime = "0.000"
+        else:
+            uptime = "{:.3f}".format((now_s - start_s) / 86400)
 
         status_list.append({
             "name": name,
             "status": status,
             "stale_ms": stale,
-            "Upptid" : uptime
+            "Upptid": uptime
         })
     gc.collect()
     return status_list
 
 def get_status_json():
     import ujson
-    wlan = network.WLAN(network.STA_IF)
-    ip = wlan.ifconfig()[0] if wlan.isconnected() else "Ej ansluten"
+    # Vi skickar nu starttid istället för IP
+    start_str = get_start_time_str()
     data = {
-        "ip": ip,
+        "start_time": start_str,
         "uptime": get_uptime(),
         "tasks": get_tasks_status(),
         "display": app_main.DISPLAY_DATA
@@ -52,9 +77,12 @@ def get_status_json():
     )
 
 def get_status_html():
+    # IP används inte längre för visning, men behålls om du vill använda senare
     wlan = network.WLAN(network.STA_IF)
     ip = wlan.ifconfig()[0] if wlan.isconnected() else "Ej ansluten"
+
     uptime = get_uptime()
+    start_str = get_start_time_str()
     d = app_main.DISPLAY_DATA
 
     html_content = f"""\
@@ -101,17 +129,43 @@ def get_status_html():
         text-decoration:none;
         border-radius:6px;
         font-weight:bold;
+        border:none;
+        cursor:pointer;
     }}
     .red-button {{ background:#d9534f; }}
+    .admin-box {{
+        margin-top:40px;
+        padding:15px;
+        background:#fff;
+        border:1px solid #ccc;
+        border-radius:6px;
+        max-width: 380px;
+        display: inline-block;
+    }}
+    /* Lösenordsfältet rad */
+    .admin-row {{
+        margin-bottom: 12px;
+    }}
+
+    /* Knappar under lösenordet */
+    .admin-buttons {{
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }}
+
+    .password-input {{
+        padding:6px 8px;
+        margin-top:4px;
+        width: 100%;
+        box-sizing: border-box;
+    }}
 </style>
 </head>
 <body>
     <h1>Kylskåpet Status</h1>
-    <p><strong>IP-adress:</strong> {ip}</p>
+    <p><strong>Startad:</strong> {start_str}</p>
     <p><strong>Uptime:</strong> <span id="uptime">{uptime}</span></p>
-
-    <a href="/ota" class="button">Starta OTA-uppdatering</a>
-    <a href="/reboot" class="button red-button">Starta om</a>
 
     <h2>Displaydata</h2>
     <table id="display-table">
@@ -135,6 +189,27 @@ def get_status_html():
         <thead><tr><th>Name</th><th>Status</th><th>Health (ms)</th><th>Uptime (days)</th></tr></thead>
         <tbody id="task-body"><tr><td colspan="4">Laddar...</td></tr></tbody>
     </table>
+
+    <!-- ADMIN-RUTAN MED NY LAYOUT -->
+    <div class="admin-box">
+        <h2>Administration</h2>
+
+        <form method="GET" class="admin-form">
+
+            <div class="admin-row">
+                <label>
+                    Lösenord:
+                    <input type="password" name="pwd" class="password-input" />
+                </label>
+            </div>
+
+            <div class="admin-buttons">
+                <button type="submit" class="button" formaction="/ota">Starta OTA-uppdatering</button>
+                <button type="submit" class="button red-button" formaction="/reboot">Starta om</button>
+            </div>
+
+        </form>
+    </div>
 
     <script>
         async function updateStatus() {{
@@ -180,6 +255,30 @@ def get_status_html():
         html_content
     )
 
+# ===== NYTT: enkel parser för path + query =====
+
+def parse_path_and_query(request_line_str):
+    """
+    Ex: 'GET /ota?pwd=xxx HTTP/1.1' -> ('/ota', {'pwd':'xxx'})
+    """
+    try:
+        parts = request_line_str.split()
+        if len(parts) < 2:
+            return "/", {}
+        full_path = parts[1]
+        if "?" not in full_path:
+            return full_path, {}
+        path, qs = full_path.split("?", 1)
+        params = {}
+        for pair in qs.split("&"):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                params[k] = v
+        return path, params
+    except:
+        return "/", {}
+
+
 async def handle_client(reader, writer, ota_callback=None):
     try:
         request_line = await reader.readline()
@@ -187,29 +286,71 @@ async def handle_client(reader, writer, ota_callback=None):
             await writer.aclose()
             return
 
-        request = request_line.decode('utf-8').strip()
+        request_str = request_line.decode('utf-8').strip()
+        path, params = parse_path_and_query(request_str)
+        pwd = params.get("pwd", "")
+
+        # Läs/ignorera resten av headers
         while True:
             header = await reader.readline()
             if not header or header == b'\r\n':
                 break
 
-        if "GET /status.json" in request:
+        # Routing
+        if path == "/status.json":
             response = get_status_json()
-        elif "GET /ota" in request:
-            response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nOTA startad..."
+
+        elif path == "/ota":
+            if pwd != secret.WEB_PASSWORD:
+                response = (
+                    "HTTP/1.1 403 Forbidden\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    "Connection: close\r\n\r\n"
+                    "<h1>Fel lösenord</h1><p>OTA avbruten.</p>"
+                )
+                await writer.awrite(response)
+                await writer.drain()
+                await writer.aclose()
+                return
+
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Connection: close\r\n\r\n"
+                "OTA startad..."
+            )
             await writer.awrite(response)
             await writer.drain()
             await asyncio.sleep(1)
-            await ota.ota_check()
             await writer.aclose()
+            await ota.ota_check()
             return
-        elif "GET /reboot" in request:
-            response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nStartar om..."
+
+        elif path == "/reboot":
+            if pwd != secret.WEB_PASSWORD:
+                response = (
+                    "HTTP/1.1 403 Forbidden\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    "Connection: close\r\n\r\n"
+                    "<h1>Fel lösenord</h1><p>Omstart avbruten.</p>"
+                )
+                await writer.awrite(response)
+                await writer.drain()
+                await writer.aclose()
+                return
+
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Connection: close\r\n\r\n"
+                "Startar om..."
+            )
             await writer.awrite(response)
             await writer.drain()
             await writer.aclose()
             await task_handler.graceful_restart()
             return
+
         else:
             response = get_status_html()
 
@@ -227,7 +368,6 @@ async def handle_client(reader, writer, ota_callback=None):
         except:
             pass
 
-
 async def start_web_server(ota_callback=None, host='0.0.0.0', port=80):
     print(f"🌐 Startar asynkron webbserver på {host}:{port}")
     server = await asyncio.start_server(lambda r, w: handle_client(r, w, ota_callback), host, port)
@@ -236,4 +376,3 @@ async def start_web_server(ota_callback=None, host='0.0.0.0', port=80):
         task_handler.feed_health("web_server.start_web_server")
         gc.collect()
         await asyncio.sleep(5)
-
