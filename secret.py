@@ -20,3 +20,6 @@ USER = "dittgithubnamn"
 REPO = "dittrepo"
 BRANCH = "main"
 FILE_PATH = "app_main.py"   # filen vi vill hålla uppdaterad
+
+#webserver
+WEB_PASSWORD = "xxx"
