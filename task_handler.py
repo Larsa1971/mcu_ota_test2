@@ -54,7 +54,7 @@ def register_task(task, name):
     now = time.ticks_ms()
     TASKS[name] = task
     HEALTH[name] = now            # senaste health-feed
-    HEALTH_START[name] = now # starttid i ms
+    HEALTH_START[name] = time.time() # starttid i s
     gc.collect()
 
 
@@ -200,5 +200,3 @@ def running_tasks():
         total += 1
     gc.collect()
     return f"{running} av {total}"
-
-
