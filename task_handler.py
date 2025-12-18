@@ -54,7 +54,11 @@ def register_task(task, name):
     now = time.ticks_ms()
     TASKS[name] = task
     HEALTH[name] = now            # senaste health-feed
-    HEALTH_START[name] = time.time() # starttid i s
+#    HEALTH_START[name] = time.time() # starttid i s    
+    if time_handler.start_time_s != 0:
+        HEALTH_START[name] = time.time()
+    else:
+        HEALTH_START[name] = 0
     gc.collect()
 
 
@@ -186,6 +190,9 @@ async def monitor_tasks(interval=15):
                 elif name == "web_server.start_web_server":
                     create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
                     restarted_nr += 1
+            else:
+                if HEALTH_START[name] == 0 and time_handler.start_time_s != 0:
+                    HEALTH_START[name] = time.time()
 
         feed_health("task_handler.monitor_tasks")
         gc.collect()
