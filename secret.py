@@ -12,7 +12,9 @@ LOW_TEMP_MIN = 27
 LOW_TEMP_MAX = 28
 HIGH_TEMP_MIN = 26.5
 HIGH_TEMP_MAX = 27.5
-MAXLEN = 1000 # 3600 2 timmar
+MAXLEN = 10800 # 3600 2 timmar
+MAX_TIME = "6h"
+MAX_BLINK = False
 
 # GitHub
 GITHUB_TOKEN = "ghp_xxxDIN_TOKENxxx"
@@ -23,3 +25,4 @@ FILE_PATH = "app_main.py"   # filen vi vill hålla uppdaterad
 
 #webserver
 WEB_PASSWORD = "xxx"
+WEB_NAME = "Kylskåpet Status"
