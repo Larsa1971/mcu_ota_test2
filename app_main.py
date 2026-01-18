@@ -7,7 +7,7 @@ import network
 from machine import Pin, I2C, PWM
 from collections import deque
 import onewire, ds18x20
-import secret # inställningar
+import secret  # inställningar
 import task_handler
 import time_handler
 import web_server
@@ -47,25 +47,23 @@ temp_24h_max = None
 control_pin_9 = Pin(9, Pin.OUT)
 control_pin_10 = Pin(10, Pin.OUT)
 
-backlight_pin_20 = Pin(20, Pin.OUT) # Tända och släcka skärmen
+backlight_pin_20 = Pin(20, Pin.OUT)  # Tända och släcka skärmen
 backlight_pin_20.value(1)
 
-led_red = PWM(Pin(6)) # Tända och släcka skärmen
+led_red = PWM(Pin(6))
 led_red.freq(1000)
 led_red.duty_u16(65535)
-led_green = PWM(Pin(7)) # Tända och släcka skärmen
+led_green = PWM(Pin(7))
 led_green.freq(1000)
 led_green.duty_u16(65535)
-led_blue = PWM(Pin(8)) # Tända och släcka skärmen
+led_blue = PWM(Pin(8))
 led_blue.freq(1000)
 led_blue.duty_u16(65535)
-
 
 trigger_pin_12 = Pin(12, Pin.IN, Pin.PULL_UP)  # Pull-up, triggas vid låg (0)
 trigger_pin_13 = Pin(13, Pin.IN, Pin.PULL_UP)
 trigger_pin_14 = Pin(14, Pin.IN, Pin.PULL_UP)
 trigger_pin_15 = Pin(15, Pin.IN, Pin.PULL_UP)
-
 
 control_output_state_9 = False
 control_output_state_10 = False
@@ -82,14 +80,27 @@ DISPLAY_DATA = {
     "voltage": None,
     "current": None,
     "power": None,
-    "mem_free_kb": None,
-    "mem_used_kb": None,
+
+    # Total
+    "charge_ah": 0,
+    "energy_wh": 0,
+    "avg_current_a": 0,
+    "avg_power_w": 0,
+    "elapsed_h": 0,
+
+    # Dygn / igår
+    "daily_ah": 0,
+    "daily_wh": 0,
+    "yesterday_ah": 0,
+    "yesterday_wh": 0,
+    "yesterday_date": None,
+
+    "mem_free_kb": 0,
+    "mem_used_kb": 0,
     "time_str": "",
 }
 
-
-
-# === INA260 setup (I2C på GP4/GP5) ===
+# === INA260 setup (I2C på GP26/GP27) ===
 i2c = I2C(1, scl=Pin(27), sda=Pin(26), freq=400000)
 INA260_ADDR = 0x40
 
@@ -110,6 +121,108 @@ def read_power():
     return raw * 10 / 1000.0
 
 
+# === Energi / laddning (robust långtid) ===
+energy_Wh = 0.0
+charge_Ah = 0.0
+
+energy_seconds = 0               # total tid i sekunder
+last_energy_ts = time.time()     # epoch-sekunder
+
+# === Dygnsförbrukning ===
+daily_Ah = 0.0
+daily_Wh = 0.0
+current_day_key = None           # (YYYY,MM,DD) i svensk tid
+
+DAILY_HISTORY_DAYS = 7
+daily_history = []               # {"day": (Y,M,D), "Ah": x, "Wh": y}
+
+
+def roll_daily_if_needed():
+    """Byter dygn baserat på svensk tid och nollställer daily_Ah/Wh."""
+    global current_day_key, daily_Ah, daily_Wh, daily_history
+
+    t = time_handler.get_swedish_time_tuple()
+    day_key = (t[0], t[1], t[2])  # (YYYY,MM,DD)
+
+    if current_day_key is None:
+        current_day_key = day_key
+        return
+
+    if day_key != current_day_key:
+        # Spara gårdagens dygnsvärden
+        daily_history.append({
+            "day": current_day_key,
+            "Ah": daily_Ah,
+            "Wh": daily_Wh
+        })
+
+        with open(f"data\{current_day_key}.txt", "w") as f:
+            f.write(f"{current_day_key}\n")
+            f.write(f"Förbrukat {daily_Ah} Ah\n")
+            f.write(f"Förbrukat {daily_Wh} Wh\n")
+            f.write(f"Snitt {daily_Ah}/24 Ah\n")
+            f.write(f"Snitt {daily_Wh}/24 Wh\n")
+
+        if len(daily_history) > DAILY_HISTORY_DAYS:
+            daily_history.pop(0)
+
+        # Nollställ för ny dag
+        daily_Ah = 0.0
+        daily_Wh = 0.0
+        current_day_key = day_key
+
+
+def get_yesterday_values():
+    """Returnerar (date_str, Ah, Wh) för senaste sparade dygn, annars (None, 0, 0)."""
+    if not daily_history:
+        return None, 0.0, 0.0
+    d = daily_history[-1]
+    y, m, day = d["day"]
+    return f"{y:04d}-{m:02d}-{day:02d}", d["Ah"], d["Wh"]
+
+
+def update_energy_accumulators(current_A, power_W):
+    """
+    Robust långtid:
+    - Tid i sekunder (int)
+    - Ah och Wh integreras korrekt
+    - Dygnsförbrukning (svensk dag) uppdateras
+    """
+    global charge_Ah, energy_Wh, energy_seconds, last_energy_ts
+    global daily_Ah, daily_Wh
+
+    # Byt dygn om datum ändrats (svensk tid)
+    roll_daily_if_needed()
+
+    now = time.time()
+    dt = now - last_energy_ts
+    last_energy_ts = now
+
+    # Skydd mot tids-hopp (t.ex. NTP sync) och konstiga dt
+    if dt <= 0 or dt > 10:
+        elapsed_h = energy_seconds / 3600.0 if energy_seconds > 0 else 0.0
+        avg_A = charge_Ah / elapsed_h if elapsed_h > 0 else 0.0
+        avg_W = energy_Wh  / elapsed_h if elapsed_h > 0 else 0.0
+        return elapsed_h, avg_A, avg_W
+
+    energy_seconds += dt
+
+    add_Ah = current_A * (dt / 3600.0)
+    add_Wh = power_W   * (dt / 3600.0)
+
+    charge_Ah += add_Ah
+    energy_Wh  += add_Wh
+
+    daily_Ah += add_Ah
+    daily_Wh += add_Wh
+
+    elapsed_h = energy_seconds / 3600.0
+    avg_A = charge_Ah / elapsed_h if elapsed_h > 0 else 0.0
+    avg_W = energy_Wh  / elapsed_h if elapsed_h > 0 else 0.0
+
+    return elapsed_h, avg_A, avg_W
+
+
 async def wifi_connect(ssid, password, timeout=20):
     if not wlan.isconnected():
         print("Ansluter till WiFi...")
@@ -128,6 +241,7 @@ async def wifi_connect(ssid, password, timeout=20):
         print("Redan ansluten:", wlan.ifconfig()[0])
         await time_handler.sync_time()
 
+
 async def monitor_wifi():
     """Kontrollerar regelbundet WiFi-status och återansluter vid behov."""
     while True:
@@ -136,7 +250,7 @@ async def monitor_wifi():
             wlan.disconnect()
             await asyncio.sleep(1)
             await wifi_connect(secret.WIFI_SSID, secret.WIFI_PASSWORD)
-            
+
         task_handler.feed_health("app_main.monitor_wifi")
         gc.collect()
         await asyncio.sleep(secret.CHECK_INTERVAL_WIFI)
@@ -149,18 +263,21 @@ async def update_temp_history(current_temp):
     if len(temp_history) > secret.MAXLEN:
         temp_history.pop(0)
         gc.collect()
-        led_green.duty_u16(20000)
+        if secret.MAX_BLINK:
+            led_green.duty_u16(20000)
 
-# Beräkna min och max om listan inte är tom
-    if temp_history != None:
+    if temp_history is not None:
         temp_24h_min = min(temp_history)
         temp_24h_max = max(temp_history)
-        
+
 
 # === Display-uppdatering ===
 async def update_display():
-    global alarm_visible, use_gpio_10, control_output_state_9, control_output_state_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
+    global alarm_visible, use_gpio_10, control_output_state_9, control_output_state_10
+    global trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
     global temperature_c, temp_24h_min, temp_24h_max, led_red, led_green, led_blue, DISPLAY_DATA
+    global charge_Ah, energy_Wh, daily_Ah, daily_Wh
+
     display.set_font("bitmap8")
 
     temperature_c = 0
@@ -175,18 +292,15 @@ async def update_display():
     mem_free = 0
     mem_alloc = 0
     time_str = ""
-    
+
     local_ver = None
     github_ver = None
-        
-    while True:
 
+    while True:
         if trigger_pin_14.value() == 0 and backlight_pin_20.value() == 1:
-            print("\n\n\nTrigger GPIO14 och backlight tänd, släcket\n\n\n")
             backlight_pin_20.value(0)
             await asyncio.sleep(0.5)
         elif trigger_pin_14.value() == 0 and backlight_pin_20.value() == 0:
-            print("\n\n\nTrigger GPIO14 och backlight släckt, tänder\n\n\n")
             backlight_pin_20.value(1)
             await asyncio.sleep(0.5)
 
@@ -199,7 +313,6 @@ async def update_display():
         display.set_pen(WHITE)
         x = (320 - display.measure_text(time_str, scale=3)) // 2
         display.text(time_str, x, 1, scale=3)
-        
 
         # Temperatur
         if temperature_c is not None:
@@ -226,7 +339,7 @@ async def update_display():
                 "Komp: Off"
             )
             x = (320 - display.measure_text(comp_str, scale=3)) // 2
-            
+
             if comp_str == "Komp: High":
                 display.set_pen(BLUE)
                 led_red.duty_u16(20000)
@@ -245,66 +358,56 @@ async def update_display():
 
             display.text(comp_str, x, 60, scale=3)
 
-            if trigger_pin_15.value() == 1: # Visa status knappen
-                # Styr Min
+            if trigger_pin_15.value() == 1 and trigger_pin_13.value() == 1:  # Visa vanliga infon
                 minmax_str = f"Styr Min: {min_th:.2f}°C"
                 x = (320 - display.measure_text(minmax_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(minmax_str, x, 90, scale=2)
-                
-                # Styr Max
+
                 minmax_str = f"Styr Max: {max_th:.2f}°C"
                 x = (320 - display.measure_text(minmax_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(minmax_str, x, 110, scale=2)
 
-                # 24h Min
                 if temp_24h_min is not None:
-                    minmax_str = f"2h Min: {temp_24h_min:.2f}°C"
+                    minmax_str = f"{secret.MAX_TIME} Min: {temp_24h_min:.2f}°C"
                 else:
-                    minmax_str = "2h Min: --°C"
+                    minmax_str = f"{secret.MAX_TIME} Min: --°C"
                 x = (320 - display.measure_text(minmax_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(minmax_str, x, 130, scale=2)
-                
-                # 24h Max
+
                 if temp_24h_max is not None:
-                    minmax_str = f"2h Max: {temp_24h_max:.2f}°C"
+                    minmax_str = f"{secret.MAX_TIME} Max: {temp_24h_max:.2f}°C"
                 else:
-                    minmax_str = "2h Max: --°C"
+                    minmax_str = f"{secret.MAX_TIME} Max: --°C"
                 x = (320 - display.measure_text(minmax_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(minmax_str, x, 150, scale=2)
-                
-                if local_ver != None:
-                    local_ver = None
 
-                if github_ver != None:
+                if local_ver is not None:
+                    local_ver = None
+                if github_ver is not None:
                     github_ver = None
 
-            else: #Visar status i stället
-
-                # Uptiden
+            if trigger_pin_15.value() == 0:  # Visa status2 i stället
                 uptime_str = web_server.get_uptime() + " " + wlan.ifconfig()[0]
                 x = (320 - display.measure_text(uptime_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(uptime_str, x, 90, scale=2)
-                
-                # Tasks
+
                 tasks_str = f"{task_handler.running_tasks()} körs, omstart {task_handler.restarted_nr}"
                 x = (320 - display.measure_text(tasks_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(tasks_str, x, 110, scale=2)
 
-                # Local ver
-                if local_ver == None:
+                if local_ver is None:
                     local_ver = "Local : " + ota.get_local_version()
                 x = (320 - display.measure_text(local_ver, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(local_ver, x, 130, scale=2)
-                
-                # Git ver
-                if github_ver == None:
+
+                if github_ver is None:
                     if uping.ping("1.1.1.1"):
                         github_ver = "Github : " + ota.get_remote_version_status()
                     else:
@@ -313,25 +416,62 @@ async def update_display():
                 display.set_pen(WHITE)
                 display.text(github_ver, x, 150, scale=2)
 
-            # Larm 
+            # Larm
             if temperature_c >= TEMP_ALARM_THRESHOLD and alarm_visible:
                 alarm_str = f"LARM TEMP OVER : {TEMP_ALARM_THRESHOLD:.0f}°C"
                 x = (320 - display.measure_text(alarm_str, scale=2)) // 2
                 display.set_pen(RED)
                 display.text(alarm_str, x, 174, scale=2)
 
-        # INA260
+        # INA260 + Energi/Ah/Wh + Dygn + Igår
+        elapsed_h = 0.0
+        avg_A = 0.0
+        avg_W = 0.0
+        y_date, y_Ah, y_Wh = get_yesterday_values()
+
         try:
             voltage = read_voltage()
             current = read_current()
             power = read_power()
+
+            elapsed_h, avg_A, avg_W = update_energy_accumulators(current, power)
+            y_date, y_Ah, y_Wh = get_yesterday_values()
+
             ina_text = f"V:{voltage:.2f}V I:{current:.2f}A P:{power:.2f}W"
         except Exception as e:
             print("INA260-fel:", e)
             ina_text = "INA260 error"
+
         x = (320 - display.measure_text(ina_text, scale=2)) // 2
         display.set_pen(WHITE)
         display.text(ina_text, x, 200, scale=2)
+        
+
+        if trigger_pin_13.value() == 0:  # Visa status2 i stället
+            energy_text = f"Tot Ah:{charge_Ah:.3f} Wh:{energy_Wh:.2f}"
+            x = (320 - display.measure_text(energy_text, scale=2)) // 2
+            display.text(energy_text, x, 90, scale=2)
+
+            energy_text2 = f"Snitt A:{avg_A:.2f} W:{avg_W:.1f}"
+            x = (320 - display.measure_text(energy_text2, scale=2)) // 2
+            display.text(energy_text2, x, 110, scale=2)
+
+
+            daily_text = f"Dygn Ah:{daily_Ah:.3f} Wh:{daily_Wh:.2f}"
+            x = (320 - display.measure_text(daily_text, scale=2)) // 2
+            display.text(daily_text, x, 130, scale=2)
+
+
+            if y_date is None:
+                y_text = "Igår: --"
+            else:
+                y_text = f"Igår {y_date} Ah:{y_Ah:.3f} Wh:{y_Wh:.2f}"
+            x = (320 - display.measure_text(y_text, scale=2)) // 2
+            display.text(y_text, x, 150, scale=2)
+
+
+
+
 
         # Minnesinfo
         gc.collect()
@@ -339,15 +479,14 @@ async def update_display():
         mem_alloc = gc.mem_alloc()
         mem_text = f"Free: {mem_free//1024}KB Used: {mem_alloc//1024}KB"
         x = (320 - display.measure_text(mem_text, scale=2)) // 2
-        display.set_pen(WHITE)
         display.text(mem_text, x, 225, scale=2)
 
         # Knapparna
         display.set_pen(WHITE)
         display.text("Kyla", 0, 55, scale=2)
         display.text("Lyse", 280, 55, scale=2)
-        display.text("Uppd", 0, 182, scale=2)
-        display.text("Stat", 280, 182, scale=2)
+        display.text("Stat1", 0, 182, scale=2)
+        display.text("Stat2", 270, 182, scale=2)
 
         display.update()
         alarm_visible = not alarm_visible
@@ -359,21 +498,38 @@ async def update_display():
             "temp_min_2h": temp_24h_min,
             "temp_max_2h": temp_24h_max,
             "comp_status": comp_str,
+
             "voltage": voltage,
             "current": current,
             "power": power,
+
+            "charge_ah": charge_Ah,
+            "energy_wh": energy_Wh,
+            "avg_current_a": avg_A,
+            "avg_power_w": avg_W,
+            "elapsed_h": elapsed_h,
+
+            "daily_ah": daily_Ah,
+            "daily_wh": daily_Wh,
+            "yesterday_ah": y_Ah,
+            "yesterday_wh": y_Wh,
+            "yesterday_date": y_date,
+
             "mem_free_kb": mem_free // 1024,
             "mem_used_kb": mem_alloc // 1024,
             "time_str": time_str,
         })
-        
+
         task_handler.feed_health("app_main.update_display")
         gc.collect()
         await asyncio.sleep(0.2)
 
+
 # === Temperaturmätning (endast trigger 12) ===
 async def read_temperature():
-    global temperature_c, control_output_state_9, control_output_state_10, use_gpio_10, trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20, temp_24h_min, temp_24h_max
+    global temperature_c, control_output_state_9, control_output_state_10, use_gpio_10
+    global trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
+    global temp_24h_min, temp_24h_max
 
     # Init GPIO vid start
     control_pin_9.value(0)
@@ -399,7 +555,7 @@ async def read_temperature():
             if roms:
                 temperature_c = ds_sensor.read_temp(roms[0])
                 await update_temp_history(temperature_c)
-                
+
                 if trigger_pin_12.value() == 0 and control_output_state_9:
                     print("\n\n\nTrigger GPIO12 och GPIO9 är ON ⇒ byter till GPIO10\n\n\n")
                     control_pin_9.value(0)
@@ -432,23 +588,22 @@ async def read_temperature():
                         control_output_state_9 = False
 
         except Exception as e:
-            print("Temp‑fel:", e)
-            
+            print("Temp-fel:", e)
+
         task_handler.feed_health("app_main.read_temperature")
         gc.collect()
         await asyncio.sleep(1.25)
 
+
 # === Main ===
 async def main():
-    
-# Checka om app_main.mai startats om, starta tasks om det inte körs
+    # Checka om app_main.main startats om, starta tasks om det inte körs
     task1 = True
     task2 = True
 
     for name, _ in list(task_handler.TASKS.items()):
         if name == "app_main.read_temperature":
             task1 = False
-            
         elif name == "app_main.update_display":
             task2 = False
 
