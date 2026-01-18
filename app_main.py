@@ -390,6 +390,32 @@ async def update_display():
                 if github_ver is not None:
                     github_ver = None
 
+            if trigger_pin_13.value() == 0:  # Visa status1 i stället
+                energy_text = f"Tot Ah:{charge_Ah:.3f} Wh:{energy_Wh:.2f}"
+                x = (320 - display.measure_text(energy_text, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(energy_text, x, 90, scale=2)
+
+                energy_text2 = f"Snitt A:{avg_A:.2f} W:{avg_W:.1f}"
+                x = (320 - display.measure_text(energy_text2, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(energy_text2, x, 110, scale=2)
+
+
+                daily_text = f"Dygn Ah:{daily_Ah:.3f} Wh:{daily_Wh:.2f}"
+                x = (320 - display.measure_text(daily_text, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(daily_text, x, 130, scale=2)
+
+
+                if y_date is None:
+                    y_text = "Igår: --"
+                else:
+                    y_text = f"{y_date} Ah:{y_Ah:.3f} Wh:{y_Wh:.2f}"
+                x = (320 - display.measure_text(y_text, scale=2)) // 2
+                display.set_pen(WHITE)
+                display.text(y_text, x, 150, scale=2)
+            
             if trigger_pin_15.value() == 0:  # Visa status2 i stället
                 uptime_str = web_server.get_uptime() + " " + wlan.ifconfig()[0]
                 x = (320 - display.measure_text(uptime_str, scale=2)) // 2
@@ -447,27 +473,6 @@ async def update_display():
         display.text(ina_text, x, 200, scale=2)
         
 
-        if trigger_pin_13.value() == 0:  # Visa status2 i stället
-            energy_text = f"Tot Ah:{charge_Ah:.3f} Wh:{energy_Wh:.2f}"
-            x = (320 - display.measure_text(energy_text, scale=2)) // 2
-            display.text(energy_text, x, 90, scale=2)
-
-            energy_text2 = f"Snitt A:{avg_A:.2f} W:{avg_W:.1f}"
-            x = (320 - display.measure_text(energy_text2, scale=2)) // 2
-            display.text(energy_text2, x, 110, scale=2)
-
-
-            daily_text = f"Dygn Ah:{daily_Ah:.3f} Wh:{daily_Wh:.2f}"
-            x = (320 - display.measure_text(daily_text, scale=2)) // 2
-            display.text(daily_text, x, 130, scale=2)
-
-
-            if y_date is None:
-                y_text = "Igår: --"
-            else:
-                y_text = f"Igår {y_date} Ah:{y_Ah:.3f} Wh:{y_Wh:.2f}"
-            x = (320 - display.measure_text(y_text, scale=2)) // 2
-            display.text(y_text, x, 150, scale=2)
 
 
 
