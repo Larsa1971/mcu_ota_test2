@@ -156,12 +156,12 @@ def roll_daily_if_needed():
             "Wh": daily_Wh
         })
 
-        with open(f"data\{current_day_key}.txt", "w") as f:
+        with open(f"/data/{current_day_key}_{daily_Ah:.2f}Ah_{daily_Ah / 24.0:.2f}A_per_h.txt", "w") as f:
             f.write(f"{current_day_key}\n")
             f.write(f"Förbrukat {daily_Ah} Ah\n")
             f.write(f"Förbrukat {daily_Wh} Wh\n")
-            f.write(f"Snitt {daily_Ah}/24 Ah\n")
-            f.write(f"Snitt {daily_Wh}/24 Wh\n")
+            f.write(f"Snitt {daily_Ah / 24.0} A/h\n")
+            f.write(f"Snitt {daily_Wh /24.0} W/h\n")
 
         if len(daily_history) > DAILY_HISTORY_DAYS:
             daily_history.pop(0)
@@ -471,12 +471,6 @@ async def update_display():
         x = (320 - display.measure_text(ina_text, scale=2)) // 2
         display.set_pen(WHITE)
         display.text(ina_text, x, 200, scale=2)
-        
-
-
-
-
-
 
         # Minnesinfo
         gc.collect()
