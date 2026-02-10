@@ -12,8 +12,8 @@ LOW_TEMP_MIN = 27
 LOW_TEMP_MAX = 28
 HIGH_TEMP_MIN = 26.5
 HIGH_TEMP_MAX = 27.5
-MAXLEN = 10800 # 3600 2 timmar
-MAX_TIME = "6h"
+MAXLEN = 9000 # 3600 2 timmar
+MAX_TIME = "5h"
 MAX_BLINK = False
 
 # GitHub
@@ -26,3 +26,4 @@ FILE_PATH = "app_main.py"   # filen vi vill hålla uppdaterad
 #webserver
 WEB_PASSWORD = "xxx"
 WEB_NAME = "Kylskåpet Status"
+WEB_BREDD = 700
