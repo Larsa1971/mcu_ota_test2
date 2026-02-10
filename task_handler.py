@@ -27,6 +27,11 @@ async def graceful_restart():
     global TASKS
     global HEALTH
     global HEALTH_START
+    
+    with open(f"/log/{app_main.current_day_key}_graceful_restart.txt", "w") as f:
+        f.write(f"{app_main.current_day_key}\n")
+        f.write(f"graceful_restart\n")
+    
     """Stoppa alla tasks och starta om maskinen."""
     print("🧹 Stoppar alla tasks...")
     for name, task in list(TASKS.items()):
@@ -103,6 +108,10 @@ async def monitor_health(interval=10, max_stale_time=120000):
                 
                 create_managed_task(monitor_tasks(interval=15), name="task_handler.monitor_tasks")
                 restarted_nr += 1
+                
+                with open(f"/log/{app_main.current_day_key}_{name}.txt", "w") as f:
+                    f.write(f"{app_main.current_day_key}\n")
+                    f.write(f"{name}\n")
 
 
             elif name != "time_handler.periodic_time_sync" and delta > max_stale_time:
@@ -190,6 +199,15 @@ async def monitor_tasks(interval=15):
                 elif name == "web_server.start_web_server":
                     create_managed_task(web_server.start_web_server(), "web_server.start_web_server")
                     restarted_nr += 1
+
+                elif name == "web_server_files.start":
+                    create_managed_task(web_server_files.start(host="0.0.0.0", port=81), "web_server_files.start")
+                    restarted_nr += 1
+
+                with open(f"/log/{app_main.current_day_key}_{name}.txt", "w") as f:
+                    f.write(f"{app_main.current_day_key}\n")
+                    f.write(f"{name}\n")
+
             else:
                 if HEALTH_START[name] == 0 and time_handler.start_time_s != 0:
                     HEALTH_START[name] = time.time()
