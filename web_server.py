@@ -29,59 +29,74 @@ def html_escape(v):
     return s
 
 
-async def _write_all(writer, data, chunk_size=1024):
+async def _awrite(writer, data):
     if isinstance(data, str):
         data = data.encode("utf-8")
+    await writer.awrite(data)
 
-    n = len(data)
-    i = 0
-    while i < n:
-        await writer.awrite(data[i:i + chunk_size])
-        i += chunk_size
+
+async def _send_headers(writer, status_line="200 OK", content_type="text/plain; charset=utf-8",
+                        extra_headers=None, content_length=None):
+    if extra_headers is None:
+        extra_headers = []
+
+    await _awrite(writer, "HTTP/1.1 {}\r\n".format(status_line))
+    await _awrite(writer, "Content-Type: {}\r\n".format(content_type))
+    await _awrite(writer, "Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n")
+    await _awrite(writer, "Pragma: no-cache\r\n")
+    await _awrite(writer, "Expires: 0\r\n")
+    await _awrite(writer, "Connection: close\r\n")
+
+    if content_length is not None:
+        await _awrite(writer, "Content-Length: {}\r\n".format(int(content_length)))
+
+    for h in extra_headers:
+        await _awrite(writer, h)
+        await _awrite(writer, "\r\n")
+
+    await _awrite(writer, "\r\n")
     await writer.drain()
 
 
-def _http_response_bytes(body_bytes, content_type):
-    headers = (
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: %s\r\n"
-        "Content-Length: %d\r\n"
-        "Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
-        "Pragma: no-cache\r\n"
-        "Expires: 0\r\n"
-        "Connection: close\r\n\r\n"
-    ) % (content_type, len(body_bytes))
-    return headers.encode("utf-8") + body_bytes
+async def _send_bytes(writer, body_bytes, status_line="200 OK", content_type="text/plain; charset=utf-8",
+                      extra_headers=None):
+    await _send_headers(writer, status_line=status_line, content_type=content_type,
+                        extra_headers=extra_headers, content_length=len(body_bytes))
+    await _awrite(writer, body_bytes)
+    await writer.drain()
 
 
-def _http_response_bytes_extra(body_bytes, content_type, status_line="200 OK", extra_headers=None):
-    if extra_headers is None:
-        extra_headers = []
-    hdr = (
-        "HTTP/1.1 %s\r\n"
-        "Content-Type: %s\r\n"
-        "Content-Length: %d\r\n"
-        "Connection: close\r\n"
-    ) % (status_line, content_type, len(body_bytes))
-    for h in extra_headers:
-        hdr += h + "\r\n"
-    hdr += "\r\n"
-    return hdr.encode("utf-8") + body_bytes
+async def _send_text(writer, text, status_line="200 OK", content_type="text/plain; charset=utf-8",
+                     extra_headers=None):
+    b = text.encode("utf-8")
+    await _send_bytes(writer, b, status_line=status_line, content_type=content_type, extra_headers=extra_headers)
 
 
-def _http_error_html(status_code, body_html):
+async def _send_file_stream(writer, full_path, content_type, status_line="200 OK",
+                            extra_headers=None, chunk_size=1024):
+    try:
+        st = os.stat(full_path)
+        size = st[6]
+    except Exception:
+        size = None
+
+    await _send_headers(writer, status_line=status_line, content_type=content_type,
+                        extra_headers=extra_headers, content_length=size)
+
+    with open(full_path, "rb") as f:
+        while True:
+            buf = f.read(chunk_size)
+            if not buf:
+                break
+            await writer.awrite(buf)
+
+    await writer.drain()
+
+
+def _http_error_body(status_code, body_html):
     reason = "Forbidden" if status_code == 403 else "Error"
-    body_bytes = body_html.encode("utf-8")
-    headers = (
-        "HTTP/1.1 %d %s\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: %d\r\n"
-        "Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
-        "Pragma: no-cache\r\n"
-        "Expires: 0\r\n"
-        "Connection: close\r\n\r\n"
-    ) % (status_code, reason, len(body_bytes))
-    return headers.encode("utf-8") + body_bytes
+    status_line = "{} {}".format(status_code, reason)
+    return status_line, body_html.encode("utf-8"), "text/html; charset=utf-8"
 
 
 # -------------------------
@@ -135,6 +150,11 @@ def list_data_files():
     return out
 
 
+def delete_data_file(filename: str):
+    full = safe_join_data(filename)
+    os.remove(full)
+
+
 # -------------------------
 # Status data
 # -------------------------
@@ -178,7 +198,7 @@ def get_tasks_status():
     return status_list
 
 
-def get_status_json_bytes():
+def get_status_json_body_bytes():
     import ujson
     payload = {
         "start_time": get_start_time_str(),
@@ -186,33 +206,30 @@ def get_status_json_bytes():
         "tasks": get_tasks_status(),
         "display": app_main.DISPLAY_DATA
     }
-    body = ujson.dumps(payload).encode("utf-8")
-    return _http_response_bytes(body, "application/json; charset=utf-8")
+    return ujson.dumps(payload).encode("utf-8")
 
 
-def get_display_json_bytes():
+def get_display_json_body_bytes():
     import ujson
     payload = {
         "start_time": get_start_time_str(),
         "uptime": get_uptime(),
         "display": app_main.DISPLAY_DATA
     }
-    body = ujson.dumps(payload).encode("utf-8")
-    return _http_response_bytes(body, "application/json; charset=utf-8")
+    return ujson.dumps(payload).encode("utf-8")
 
 
-def get_tasks_json_bytes():
+def get_tasks_json_body_bytes():
     import ujson
     payload = {"tasks": get_tasks_status()}
-    body = ujson.dumps(payload).encode("utf-8")
-    return _http_response_bytes(body, "application/json; charset=utf-8")
+    return ujson.dumps(payload).encode("utf-8")
 
 
 # -------------------------
-# HTML page
+# HTML page (streaming)
 # -------------------------
 
-def get_status_html_bytes():
+def _build_status_values():
     uptime = get_uptime()
     start_str = get_start_time_str()
     d = app_main.DISPLAY_DATA
@@ -246,8 +263,9 @@ def get_status_html_bytes():
             file_items.append(
                 "<li>"
                 "<a href=\"#\" onclick=\"openFile('%s');return false;\">%s</a> "
-                "<a class=\"dl\" href=\"/download?name=%s\">[ladda ner]</a>"
-                "</li>" % (ef, ef, ef)
+                "<a class=\"dl\" href=\"/download?name=%s\">[ladda ner]</a> "
+                "<a class=\"dl\" href=\"#\" onclick=\"deleteFile('%s');return false;\">[radera]</a>"
+                "</li>" % (ef, ef, ef, ef)
             )
         files_items_html = "".join(file_items)
     else:
@@ -255,7 +273,7 @@ def get_status_html_bytes():
 
     web_bredd = int(getattr(secret, "WEB_BREDD", 700))
 
-    values = {
+    return {
         "web_name": html_escape(secret.WEB_NAME),
         "web_bredd": web_bredd,
 
@@ -291,96 +309,92 @@ def get_status_html_bytes():
         "mem_used_kb": html_escape(d.get("mem_used_kb", "--")),
 
         "tasks_rows": tasks_rows,
-        "data_dir": html_escape(DATA_DIR),
         "files_items": files_items_html,
     }
 
-    html_template = """\
+
+_HTML_HEAD_AND_BODY_1 = """\
 <!DOCTYPE html>
 <html lang="sv">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>%(web_name)s</title>
+<title>{web_name}</title>
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <style>
-    body { font-family: sans-serif; padding: 0; margin: 0; background:#f0f0f0; }
-    h1, h2 { color: #333; }
+    body {{ font-family: sans-serif; padding: 0; margin: 0; background:#f0f0f0; }}
+    h1, h2 {{ color: #333; }}
 
-    /* Vänsterjusterat. På mobil fyller den skärmen. */
-    .page {
-        max-width: %(web_bredd)spx;
-        width: 100%%;
+    .page {{
+        max-width: {web_bredd}px;
+        width: 100%;
         margin: 0;
         padding: 12px;
         box-sizing: border-box;
-    }
+    }}
 
-    table {
+    table {{
         background:#fff;
         border:1px solid #ccc;
         border-collapse:collapse;
-        width: 100%%;
+        width: 100%;
         margin-bottom:20px;
         box-sizing: border-box;
-    }
-    th { background:#eee; text-align:left; }
-    td, th { border:1px solid #ccc; padding:4px 8px; text-align:left; vertical-align:middle; }
-    td.label { font-weight:bold; width: 140px; white-space: nowrap; }
+    }}
+    th {{ background:#eee; text-align:left; }}
+    td, th {{ border:1px solid #ccc; padding:4px 8px; text-align:left; vertical-align:middle; }}
+    td.label {{ font-weight:bold; width: 140px; white-space: nowrap; }}
 
-    /* --- Tasks: fasta kolumnbredder --- */
-    #task-table { table-layout: fixed; }
-    #task-table th, #task-table td {
+    #task-table {{ table-layout: fixed; }}
+    #task-table th, #task-table td {{
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-    }
-    /* valfritt: lite mindre font i task-tabellen */
-    /* #task-table { font-size: 0.95em; } */
+    }}
 
-    .button {
+    .button {{
         display:inline-block; padding:10px 20px; margin:5px;
         background:#007aff; color:#fff; border-radius:6px; font-weight:bold;
         border:none; cursor:pointer;
-    }
-    .red-button { background:#d9534f; }
+    }}
+    .red-button {{ background:#d9534f; }}
 
-    .file-box, .admin-box {
+    .file-box, .admin-box {{
         padding:15px; background:#fff; border:1px solid #ccc;
         border-radius:6px;
-        width: 100%%;
+        width: 100%;
         box-sizing: border-box;
         display:block;
-    }
-    .file-box { margin: 0 0 20px 0; }
-    .admin-box { clear: both; margin-top: 0; }
+    }}
+    .file-box {{ margin: 0 0 20px 0; }}
+    .admin-box {{ clear: both; margin-top: 0; }}
 
-    .admin-row { margin-bottom: 12px; }
-    .admin-buttons { display:flex; flex-direction:column; gap:8px; }
-    .password-input { padding:6px 8px; margin-top:4px; width:100%%; box-sizing:border-box; }
-    .js-status { font-size: 12px; color:#555; margin: 8px 0 16px 0; }
+    .admin-row {{ margin-bottom: 12px; }}
+    .admin-buttons {{ display:flex; flex-direction:column; gap:8px; }}
+    .password-input {{ padding:6px 8px; margin-top:4px; width:100%; box-sizing:border-box; }}
+    .js-status {{ font-size: 12px; color:#555; margin: 8px 0 16px 0; }}
 
-    .file-box ul { padding-left: 18px; margin: 0; }
-    .file-box li { margin: 6px 0; }
-    .file-box a.dl { color: #666; font-size: 0.9em; text-decoration: none; }
+    .file-box ul {{ padding-left: 18px; margin: 0; }}
+    .file-box li {{ margin: 6px 0; }}
+    .file-box a.dl {{ color: #666; font-size: 0.9em; text-decoration: none; }}
 
-    .modal { display:none; position:fixed; z-index:999; left:0; top:0; width:100%%; height:100%%;
-             background: rgba(0,0,0,0.55); }
+    .modal {{ display:none; position:fixed; z-index:999; left:0; top:0; width:100%; height:100%;
+             background: rgba(0,0,0,0.55); }}
 
-    .modal-content {
+    .modal-content {{
         background:#fff;
         margin:10vh 0 0 0;
         padding:16px;
-        width: 100%%;
-        max-width: %(web_bredd)spx;
+        width: 100%;
+        max-width: {web_bredd}px;
         border-radius:10px;
         box-shadow:0 10px 30px rgba(0,0,0,0.35);
         box-sizing: border-box;
-    }
-    .row { display:flex; justify-content:space-between; gap:10px; align-items:center; }
-    pre {
+    }}
+    .row {{ display:flex; justify-content:space-between; gap:10px; align-items:center; }}
+    pre {{
         white-space: pre-wrap;
         word-break: break-word;
         background:#f6f6f6;
@@ -388,70 +402,72 @@ def get_status_html_bytes():
         border-radius:8px;
         max-height: 60vh;
         overflow:auto;
-        width:100%%;
+        width:100%;
         box-sizing:border-box;
-    }
-    .file-close-btn { padding:8px 12px; border-radius:8px; border:1px solid #ccc; background:#fafafa; }
+    }}
+    .file-close-btn {{ padding:8px 12px; border-radius:8px; border:1px solid #ccc; background:#fafafa; }}
 </style>
 </head>
 <body>
 <div class="page">
-    <h1>%(web_name)s</h1>
+    <h1>{web_name}</h1>
 
     <div class="js-status" id="js_status">JS: laddar...</div>
 
     <h2>Displaydata</h2>
     <table id="display-table">
         <tbody>
-            <tr><td class="label">Tid</td><td class="value" id="time_str">%(time_str)s</td></tr>
-            <tr><td class="label">Startad</td><td class="value" id="start_time">%(start_str)s</td></tr>
-            <tr><td class="label">Uptid</td><td class="value" id="uptime">%(uptime)s</td></tr>
+            <tr><td class="label">Tid</td><td class="value" id="time_str">{time_str}</td></tr>
+            <tr><td class="label">Startad</td><td class="value" id="start_time">{start_str}</td></tr>
+            <tr><td class="label">Uptid</td><td class="value" id="uptime">{uptime}</td></tr>
 
-            <tr><td class="label">Temperatur</td><td class="value" id="temperature">%(temperature)s °C</td></tr>
-            <tr><td class="label">Min (Styr)</td><td class="value" id="temp_min">%(temp_min)s °C</td></tr>
-            <tr><td class="label">Max (Styr)</td><td class="value" id="temp_max">%(temp_max)s °C</td></tr>
-            <tr><td class="label">Min (6h)</td><td class="value" id="temp_min_2h">%(temp_min_2h)s °C</td></tr>
-            <tr><td class="label">Max (6h)</td><td class="value" id="temp_max_2h">%(temp_max_2h)s °C</td></tr>
-            <tr><td class="label">Kompressor</td><td class="value" id="comp_status">%(comp_status)s</td></tr>
+            <tr><td class="label">Temperatur</td><td class="value" id="temperature">{temperature} °C</td></tr>
+            <tr><td class="label">Min (Styr)</td><td class="value" id="temp_min">{temp_min} °C</td></tr>
+            <tr><td class="label">Max (Styr)</td><td class="value" id="temp_max">{temp_max} °C</td></tr>
+            <tr><td class="label">Min (6h)</td><td class="value" id="temp_min_2h">{temp_min_2h} °C</td></tr>
+            <tr><td class="label">Max (6h)</td><td class="value" id="temp_max_2h">{temp_max_2h} °C</td></tr>
+            <tr><td class="label">Kompressor</td><td class="value" id="comp_status">{comp_status}</td></tr>
 
-            <tr><td class="label">Spänning</td><td class="value" id="voltage">%(voltage)s V</td></tr>
-            <tr><td class="label">Ström</td><td class="value" id="current">%(current)s A</td></tr>
-            <tr><td class="label">Effekt</td><td class="value" id="power">%(power)s W</td></tr>
+            <tr><td class="label">Spänning</td><td class="value" id="voltage">{voltage} V</td></tr>
+            <tr><td class="label">Ström</td><td class="value" id="current">{current} A</td></tr>
+            <tr><td class="label">Effekt</td><td class="value" id="power">{power} W</td></tr>
 
-            <tr><td class="label">Total Ström</td><td class="value" id="charge_ah">%(charge_ah)s Ah</td></tr>
-            <tr><td class="label">Total Effekt</td><td class="value" id="energy_wh">%(energy_wh)s Wh</td></tr>
-            <tr><td class="label">Snitt Ström</td><td class="value" id="avg_current_a">%(avg_current_a)s A</td></tr>
-            <tr><td class="label">Snitt Effekt</td><td class="value" id="avg_power_w">%(avg_power_w)s W</td></tr>
-            <tr><td class="label">Under timmar</td><td class="value" id="elapsed_h">%(elapsed_h)s h</td></tr>
+            <tr><td class="label">Total Ström</td><td class="value" id="charge_ah">{charge_ah} Ah</td></tr>
+            <tr><td class="label">Total Effekt</td><td class="value" id="energy_wh">{energy_wh} Wh</td></tr>
+            <tr><td class="label">Snitt Ström</td><td class="value" id="avg_current_a">{avg_current_a} A</td></tr>
+            <tr><td class="label">Snitt Effekt</td><td class="value" id="avg_power_w">{avg_power_w} W</td></tr>
+            <tr><td class="label">Under timmar</td><td class="value" id="elapsed_h">{elapsed_h} h</td></tr>
 
-            <tr><td class="label">Dygn Ström</td><td class="value" id="daily_ah">%(daily_ah)s Ah</td></tr>
-            <tr><td class="label">Dygn Effekt</td><td class="value" id="daily_wh">%(daily_wh)s Wh</td></tr>
+            <tr><td class="label">Dygn Ström</td><td class="value" id="daily_ah">{daily_ah} Ah</td></tr>
+            <tr><td class="label">Dygn Effekt</td><td class="value" id="daily_wh">{daily_wh} Wh</td></tr>
 
-            <tr><td class="label">Igår Datum</td><td class="value" id="yesterday_date">%(yesterday_date)s</td></tr>
-            <tr><td class="label">Igår Ström</td><td class="value" id="yesterday_ah">%(yesterday_ah)s Ah</td></tr>
-            <tr><td class="label">Igår Effekt</td><td class="value" id="yesterday_wh">%(yesterday_wh)s Wh</td></tr>
+            <tr><td class="label">Igår Datum</td><td class="value" id="yesterday_date">{yesterday_date}</td></tr>
+            <tr><td class="label">Igår Ström</td><td class="value" id="yesterday_ah">{yesterday_ah} Ah</td></tr>
+            <tr><td class="label">Igår Effekt</td><td class="value" id="yesterday_wh">{yesterday_wh} Wh</td></tr>
 
-            <tr><td class="label">Minne ledigt/använt</td><td class="value" id="mem">%(mem_free_kb)s KB / %(mem_used_kb)s KB</td></tr>
+            <tr><td class="label">Minne ledigt/använt</td><td class="value" id="mem">{mem_free_kb} KB / {mem_used_kb} KB</td></tr>
         </tbody>
     </table>
 
     <h2>Tasks</h2>
     <table id="task-table">
         <colgroup>
-            <col style="width:44%%" />
-            <col style="width:16%%" />
-            <col style="width:20%%" />
-            <col style="width:20%%" />
+            <col style="width:44%" />
+            <col style="width:16%" />
+            <col style="width:20%" />
+            <col style="width:20%" />
         </colgroup>
         <thead><tr><th>Name</th><th>Status</th><th>Health (ms)</th><th>Uptime (days)</th></tr></thead>
         <tbody id="task-tbody">
-            %(tasks_rows)s
+"""
+
+_HTML_BODY_2 = """\
         </tbody>
     </table>
 
     <div class="file-box">
         <h2>Daglig statistik</h2>
-        <ul>%(files_items)s</ul>
+        <ul>__FILES_ITEMS__</ul>
     </div>
 
     <div id="modal" class="modal" onclick="hideModal()">
@@ -473,7 +489,7 @@ def get_status_html_bytes():
             <div class="admin-row">
                 <label>
                     Lösenord:
-                    <input type="password" name="pwd" class="password-input" />
+                    <input type="password" name="pwd" class="password-input" id="pwd_input" autocomplete="current-password" />
                 </label>
             </div>
             <div class="admin-buttons">
@@ -511,7 +527,7 @@ def get_status_html_bytes():
       function httpGetJson(url, cb) {
         var xhr = new XMLHttpRequest();
         xhr.open("GET", url, true);
-        xhr.timeout = 4000;
+        xhr.timeout = 6000;
 
         xhr.onreadystatechange = function () {
           if (xhr.readyState !== 4) return;
@@ -625,6 +641,34 @@ def get_status_html_bytes():
         setJsStatus("uppdaterad " + (new Date()).toLocaleTimeString());
       }
 
+      function getPwdOrPrompt() {
+        var el = byId("pwd_input");
+        var p = el ? el.value : "";
+        if (p) return p;
+        return prompt("Ange lösenord för att radera fil:");
+      }
+
+      window.deleteFile = async function(name) {
+        if (!confirm("Radera filen '" + name + "'?")) return;
+
+        var pwd = getPwdOrPrompt();
+        if (!pwd) { alert("Avbrutet (inget lösenord)."); return; }
+
+        try {
+          const url = "/delete?name=" + encodeURIComponent(name)
+                    + "&pwd=" + encodeURIComponent(pwd)
+                    + "&ts=" + Date.now();
+          const r = await fetch(url);
+          const t = await r.text();
+          if (!r.ok) throw new Error(t || ("HTTP " + r.status));
+
+          alert("Raderad: " + name);
+          location.reload();
+        } catch(e) {
+          alert("Fel: " + e);
+        }
+      };
+
       window.openFile = async function(name) {
         byId('file_title').textContent = name;
         byId('file_content').textContent = '(laddar...)';
@@ -654,9 +698,20 @@ def get_status_html_bytes():
 </body>
 </html>
 """
-    html_content = html_template % values
-    body_bytes = html_content.encode("utf-8")
-    return _http_response_bytes(body_bytes, "text/html; charset=utf-8")
+
+
+async def send_status_html(writer):
+    gc.collect()
+    v = _build_status_values()
+
+    await _send_headers(writer, status_line="200 OK", content_type="text/html; charset=utf-8",
+                        extra_headers=None, content_length=None)
+
+    await _awrite(writer, _HTML_HEAD_AND_BODY_1.format(**v))
+    await _awrite(writer, v["tasks_rows"])
+    await _awrite(writer, _HTML_BODY_2.replace("__FILES_ITEMS__", v["files_items"]))
+
+    await writer.drain()
 
 
 # -------------------------
@@ -701,85 +756,81 @@ async def handle_client(reader, writer, ota_callback=None):
                 break
 
         if path == "/status.json":
-            response_bytes = get_status_json_bytes()
+            body = get_status_json_body_bytes()
+            await _send_bytes(writer, body, content_type="application/json; charset=utf-8")
 
         elif path == "/display.json":
-            response_bytes = get_display_json_bytes()
+            body = get_display_json_body_bytes()
+            await _send_bytes(writer, body, content_type="application/json; charset=utf-8")
 
         elif path == "/tasks.json":
-            response_bytes = get_tasks_json_bytes()
+            body = get_tasks_json_body_bytes()
+            await _send_bytes(writer, body, content_type="application/json; charset=utf-8")
 
         elif path == "/file":
             name = params.get("name", "")
             try:
                 full = safe_join_data(name)
-                with open(full, "rb") as f:
-                    data = f.read()
-                response_bytes = _http_response_bytes_extra(
-                    data,
-                    "text/plain; charset=utf-8",
-                    status_line="200 OK"
-                )
+                await _send_file_stream(writer, full, "text/plain; charset=utf-8", status_line="200 OK")
             except Exception as e:
                 msg = ("Kunde inte läsa fil: %s\n%s" % (name, e)).encode("utf-8")
-                response_bytes = _http_response_bytes_extra(
-                    msg,
-                    "text/plain; charset=utf-8",
-                    status_line="404 Not Found"
-                )
+                await _send_bytes(writer, msg, status_line="404 Not Found", content_type="text/plain; charset=utf-8")
 
         elif path == "/download":
             name = params.get("name", "")
             try:
                 full = safe_join_data(name)
-                with open(full, "rb") as f:
-                    data = f.read()
                 extra = ['Content-Disposition: attachment; filename="%s"' % name]
-                response_bytes = _http_response_bytes_extra(
-                    data,
-                    "application/octet-stream",
-                    status_line="200 OK",
-                    extra_headers=extra
-                )
+                await _send_file_stream(writer, full, "application/octet-stream", status_line="200 OK", extra_headers=extra)
             except Exception as e:
                 msg = ("Kunde inte ladda ner: %s\n%s" % (name, e)).encode("utf-8")
-                response_bytes = _http_response_bytes_extra(
-                    msg,
-                    "text/plain; charset=utf-8",
-                    status_line="404 Not Found"
-                )
+                await _send_bytes(writer, msg, status_line="404 Not Found", content_type="text/plain; charset=utf-8")
 
-        elif path == "/ota":
+        elif path == "/delete":
             if pwd != secret.WEB_PASSWORD:
-                response_bytes = _http_error_html(403, "<h1>Fel lösenord</h1><p>OTA avbruten.</p>")
-                await _write_all(writer, response_bytes)
+                await _send_text(writer, "Fel lösenord", status_line="403 Forbidden",
+                                 content_type="text/plain; charset=utf-8")
                 await writer.aclose()
                 return
 
-            response_bytes = _http_response_bytes(b"OTA startad...", "text/plain; charset=utf-8")
-            await _write_all(writer, response_bytes)
+            name = params.get("name", "")
+            try:
+                delete_data_file(name)
+                await _send_text(writer, "OK", status_line="200 OK", content_type="text/plain; charset=utf-8")
+            except Exception as e:
+                await _send_text(writer, "Kunde inte radera: %s\n%s" % (name, e),
+                                 status_line="404 Not Found", content_type="text/plain; charset=utf-8")
+
+        elif path == "/ota":
+            if pwd != secret.WEB_PASSWORD:
+                status_line, body, ctype = _http_error_body(403, "<h1>Fel lösenord</h1><p>OTA avbruten.</p>")
+                await _send_bytes(writer, body, status_line=status_line, content_type=ctype)
+                await writer.aclose()
+                return
+
+            await _send_text(writer, "OTA startad...", content_type="text/plain; charset=utf-8")
             await writer.aclose()
+            gc.collect()
             await asyncio.sleep(1)
             await ota.ota_check()
             return
 
         elif path == "/reboot":
             if pwd != secret.WEB_PASSWORD:
-                response_bytes = _http_error_html(403, "<h1>Fel lösenord</h1><p>Omstart avbruten.</p>")
-                await _write_all(writer, response_bytes)
+                status_line, body, ctype = _http_error_body(403, "<h1>Fel lösenord</h1><p>Omstart avbruten.</p>")
+                await _send_bytes(writer, body, status_line=status_line, content_type=ctype)
                 await writer.aclose()
                 return
 
-            response_bytes = _http_response_bytes(b"Startar om...", "text/plain; charset=utf-8")
-            await _write_all(writer, response_bytes)
+            await _send_text(writer, "Startar om...", content_type="text/plain; charset=utf-8")
             await writer.aclose()
+            gc.collect()
             await task_handler.graceful_restart()
             return
 
         else:
-            response_bytes = get_status_html_bytes()
+            await send_status_html(writer)
 
-        await _write_all(writer, response_bytes)
         await writer.aclose()
         gc.collect()
 
