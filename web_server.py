@@ -100,6 +100,54 @@ def _http_error_body(status_code, body_html):
 
 
 # -------------------------
+# Space / memory helpers
+# -------------------------
+
+def get_ram_kb():
+    # heap RAM
+    gc.collect()
+    free_b = gc.mem_free()
+    used_b = gc.mem_alloc()
+    return free_b // 1024, used_b // 1024
+
+
+def get_fs_kb(path="/"):
+    # filesystem (flash) stats
+    try:
+        st = os.statvfs(path)
+        frsize = st[1]
+        total_b = st[2] * frsize
+        free_b = st[3] * frsize
+        used_b = total_b - free_b
+        return free_b // 1024, used_b // 1024
+    except Exception:
+        return None, None
+
+
+def get_display_with_space():
+    # Return a display dict with RAM+Flash keys added (without modifying app_main.DISPLAY_DATA)
+    d = app_main.DISPLAY_DATA
+    out = {}
+    try:
+        out.update(d)
+    except Exception:
+        pass
+
+    ram_free_kb, ram_used_kb = get_ram_kb()
+
+    # Flash free/used: use DATA_DIR if possible, otherwise "/"
+    flash_free_kb, flash_used_kb = get_fs_kb(DATA_DIR)
+    if flash_free_kb is None:
+        flash_free_kb, flash_used_kb = get_fs_kb("/")
+
+    out["mem_free_kb"] = ram_free_kb
+    out["mem_used_kb"] = ram_used_kb
+    out["flash_free_kb"] = flash_free_kb if flash_free_kb is not None else "--"
+    out["flash_used_kb"] = flash_used_kb if flash_used_kb is not None else "--"
+    return out
+
+
+# -------------------------
 # File listing helpers
 # -------------------------
 
@@ -204,7 +252,7 @@ def get_status_json_body_bytes():
         "start_time": get_start_time_str(),
         "uptime": get_uptime(),
         "tasks": get_tasks_status(),
-        "display": app_main.DISPLAY_DATA
+        "display": get_display_with_space()
     }
     return ujson.dumps(payload).encode("utf-8")
 
@@ -214,7 +262,7 @@ def get_display_json_body_bytes():
     payload = {
         "start_time": get_start_time_str(),
         "uptime": get_uptime(),
-        "display": app_main.DISPLAY_DATA
+        "display": get_display_with_space()
     }
     return ujson.dumps(payload).encode("utf-8")
 
@@ -232,7 +280,8 @@ def get_tasks_json_body_bytes():
 def _build_status_values():
     uptime = get_uptime()
     start_str = get_start_time_str()
-    d = app_main.DISPLAY_DATA
+
+    d = get_display_with_space()
     tasks = get_tasks_status()
 
     if tasks:
@@ -307,6 +356,8 @@ def _build_status_values():
 
         "mem_free_kb": html_escape(d.get("mem_free_kb", "--")),
         "mem_used_kb": html_escape(d.get("mem_used_kb", "--")),
+        "flash_free_kb": html_escape(d.get("flash_free_kb", "--")),
+        "flash_used_kb": html_escape(d.get("flash_used_kb", "--")),
 
         "tasks_rows": tasks_rows,
         "files_items": files_items_html,
@@ -445,7 +496,8 @@ _HTML_HEAD_AND_BODY_1 = """\
             <tr><td class="label">Igår Ström</td><td class="value" id="yesterday_ah">{yesterday_ah} Ah</td></tr>
             <tr><td class="label">Igår Effekt</td><td class="value" id="yesterday_wh">{yesterday_wh} Wh</td></tr>
 
-            <tr><td class="label">Minne ledigt/använt</td><td class="value" id="mem">{mem_free_kb} KB / {mem_used_kb} KB</td></tr>
+            <tr><td class="label">Minne (RAM) ledigt/använt</td><td class="value" id="mem">{mem_free_kb} KB / {mem_used_kb} KB</td></tr>
+            <tr><td class="label">Lagring (Flash) ledigt/använt</td><td class="value" id="flash">{flash_free_kb} KB / {flash_used_kb} KB</td></tr>
         </tbody>
     </table>
 
@@ -591,6 +643,13 @@ _HTML_BODY_2 = """\
             memEl.textContent = free + " KB / " + used + " KB";
           }
 
+          var flashEl = byId("flash");
+          if (flashEl) {
+            var ffree = valOrDash(d.flash_free_kb);
+            var fused = valOrDash(d.flash_used_kb);
+            flashEl.textContent = ffree + " KB / " + fused + " KB";
+          }
+
           done(null);
         });
       }
@@ -642,17 +701,19 @@ _HTML_BODY_2 = """\
       }
 
       function getPwdOrPrompt() {
+        // prompt() kan inte maskas, så vi kräver password-fältet (maskat).
         var el = byId("pwd_input");
         var p = el ? el.value : "";
         if (p) return p;
-        return prompt("Ange lösenord för att radera fil:");
+        alert("Skriv lösenordet i fältet 'Lösenord' (maskat) för att radera.");
+        return "";
       }
 
       window.deleteFile = async function(name) {
         if (!confirm("Radera filen '" + name + "'?")) return;
 
         var pwd = getPwdOrPrompt();
-        if (!pwd) { alert("Avbrutet (inget lösenord)."); return; }
+        if (!pwd) { return; }
 
         try {
           const url = "/delete?name=" + encodeURIComponent(name)
