@@ -341,6 +341,10 @@ def _build_status_values():
         "current": html_escape(d.get("current", "--")),
         "power": html_escape(d.get("power", "--")),
 
+        "comp_on_since": html_escape(d.get("comp_on_since", "--")),
+        "comp_off_since": html_escape(d.get("comp_off_since", "--")),
+        "comp_on_seconds_today": html_escape(d.get("comp_on_seconds_today", "--")),
+
         "charge_ah": html_escape(d.get("charge_ah", "--")),
         "energy_wh": html_escape(d.get("energy_wh", "--")),
         "avg_current_a": html_escape(d.get("avg_current_a", "--")),
@@ -478,6 +482,16 @@ _HTML_HEAD_AND_BODY_1 = """\
             <tr><td class="label">Min (6h)</td><td class="value" id="temp_min_2h">{temp_min_2h} °C</td></tr>
             <tr><td class="label">Max (6h)</td><td class="value" id="temp_max_2h">{temp_max_2h} °C</td></tr>
             <tr><td class="label">Kompressor</td><td class="value" id="comp_status">{comp_status}</td></tr>
+
+
+
+
+            <tr><td class="label">Kompressor på</td><td class="value" id="comp_on_since">{comp_on_since}</td></tr>
+            <tr><td class="label">Kompressor av</td><td class="value" id="comp_off_since">{comp_off_since}</td></tr>
+            <tr><td class="label">Kompressor körd i sekunder</td><td class="value" id="comp_on_seconds_today">{comp_on_seconds_today}</td></tr>
+
+
+
 
             <tr><td class="label">Spänning</td><td class="value" id="voltage">{voltage} V</td></tr>
             <tr><td class="label">Ström</td><td class="value" id="current">{current} A</td></tr>
@@ -618,6 +632,10 @@ _HTML_BODY_2 = """\
           setText("temp_min_2h", d.temp_min_2h, " °C");
           setText("temp_max_2h", d.temp_max_2h, " °C");
           setText("comp_status", d.comp_status);
+
+          setText("comp_on_since", d.comp_on_since);
+          setText("comp_off_since", d.comp_off_since);
+          setText("comp_on_seconds_today", d.comp_on_seconds_today);
 
           setText("voltage", d.voltage, " V");
           setText("current", d.current, " A");
