@@ -70,6 +70,109 @@ control_output_state_10 = False
 use_gpio_10 = False
 alarm_visible = True
 
+# ---------------------------------------------------------
+# Kompressor-tidsräkning (NYTT)
+# ---------------------------------------------------------
+# 1) tid (epoch-sekunder) när kompressorn senast gick OFF
+comp_off_since = None
+# 2) tid (epoch-sekunder) när kompressorn senast gick ON (LOW eller HIGH)
+comp_on_since = None
+# 3) antal sekunder kompressorn varit ON (LOW/HIGH) idag (nollas vid nytt dygn)
+comp_on_seconds_today = 0
+comp_on_seconds_yesterday = 0
+
+# Interna hjälpare för ackumulering & dygnsbyte
+_comp_last_state = None     # "OFF" / "LOW" / "HIGH"
+_comp_last_ts = None        # epoch-sekunder
+_comp_day_key = None        # (YYYY,MM,DD) i svensk tid
+
+
+def _get_comp_mode():
+    # HIGH om GPIO10 används och är på
+    if use_gpio_10 and control_output_state_10:
+        return "HIGH"
+    # Om vi är i "use_gpio_10"-läge men GPIO10 inte är på => räknas som OFF
+    if use_gpio_10 and not control_output_state_10:
+        return "OFF"
+    # LOW om GPIO9 är på
+    if control_output_state_9:
+        return "LOW"
+    return "OFF"
+
+
+def _update_comp_tracking(mode):
+    """
+    Uppdaterar:
+      - comp_off_since / comp_on_since (sätter alltid den andra till None)
+      - comp_on_seconds_today (summerar ON-tid per dag)
+      - nollställer comp_on_seconds_today vid nytt svenskt dygn
+    """
+    global comp_off_since, comp_on_since, comp_on_seconds_today, comp_on_seconds_yesterday
+    global _comp_last_state, _comp_last_ts, _comp_day_key
+
+    now = time.time()
+
+    # Init första gången
+    if _comp_last_ts is None:
+        _comp_last_ts = now
+        _comp_last_state = mode
+        t = time_handler.get_swedish_time_tuple()
+        _comp_day_key = (t[0], t[1], t[2])
+        time_str = ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(*t[:6]))
+        if mode == "OFF":
+            comp_off_since = time_str
+            comp_on_since = None
+        else:
+            comp_on_since = time_str
+            comp_off_since = None
+        return
+
+    # Dygnsbyte enligt svensk tid
+    t = time_handler.get_swedish_time_tuple()
+    time_str = ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(*t[:6]))
+    day_key = (t[0], t[1], t[2])
+    if _comp_day_key is None:
+        _comp_day_key = day_key
+    elif day_key != _comp_day_key:
+        # Nollställ för ny dag
+        time_str = ("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(*t[:6]))
+        comp_on_seconds_yesterday = comp_on_seconds_today
+        comp_on_seconds_today = 0
+        _comp_day_key = day_key
+
+        # Starta om "perioden" från midnatt-ish (nu), baserat på aktuellt läge
+        _comp_last_ts = now
+        _comp_last_state = mode
+        if mode == "OFF":
+            comp_off_since = time_str
+            comp_on_since = None
+        else:
+            comp_on_since = time_str
+            comp_off_since = None
+        return
+
+    # Ackumulera tid sedan förra uppdateringen om vi var ON
+    dt = now - _comp_last_ts
+    _comp_last_ts = now
+
+    # Skydd mot tidshopp
+    if dt > 0 and dt < 30:
+        if _comp_last_state in ("LOW", "HIGH"):
+            comp_on_seconds_today += int(dt)
+
+    # Hantera state transition och "since"-tider
+    if mode == "OFF":
+        if _comp_last_state != "OFF":
+            comp_off_since = time_str
+            comp_on_since = None
+    else:
+        if _comp_last_state == "OFF":
+            comp_on_since = time_str
+            comp_off_since = None
+
+    _comp_last_state = mode
+
+
 DISPLAY_DATA = {
     "temperature": None,
     "temp_min": None,
@@ -77,6 +180,13 @@ DISPLAY_DATA = {
     "temp_min_2h": None,
     "temp_max_2h": None,
     "comp_status": "Okänd",
+
+    # NYTT: kompressor-tider
+    "comp_off_since": None,
+    "comp_on_since": None,
+    "comp_on_seconds_today": 0,
+    "comp_on_seconds_yesterday": 0,
+
     "voltage": None,
     "current": None,
     "power": None,
@@ -139,7 +249,7 @@ daily_history = []               # {"day": (Y,M,D), "Ah": x, "Wh": y}
 
 def roll_daily_if_needed():
     """Byter dygn baserat på svensk tid och nollställer daily_Ah/Wh."""
-    global current_day_key, daily_Ah, daily_Wh, daily_history
+    global current_day_key, daily_Ah, daily_Wh, daily_history, comp_on_seconds_today, comp_on_seconds_yesterday
 
     t = time_handler.get_swedish_time_tuple()
     day_key = (t[0], t[1], t[2])  # (YYYY,MM,DD)
@@ -156,12 +266,20 @@ def roll_daily_if_needed():
             "Wh": daily_Wh
         })
 
+
         with open(f"/data/{current_day_key}_{daily_Ah:.2f}Ah_{daily_Ah / 24.0:.2f}A_per_h.txt", "w") as f:
             f.write(f"{current_day_key}\n")
             f.write(f"Förbrukat {daily_Ah} Ah\n")
             f.write(f"Förbrukat {daily_Wh} Wh\n")
             f.write(f"Snitt {daily_Ah / 24.0} A/h\n")
             f.write(f"Snitt {daily_Wh /24.0} W/h\n")
+            if comp_on_seconds_yesterday != 0:
+                f.write(f"Kompressor kört i {comp_on_seconds_yesterday} sekunder\n")
+                f.write(f"Kompressor {(comp_on_seconds_yesterday / 86400) * 100:.1f} %\n")
+                comp_on_seconds_yesterday = 0
+            else:
+                f.write(f"Kompressor kört i {comp_on_seconds_today} sekunder\n")
+                f.write(f"Kompressor {(comp_on_seconds_today / 86400) * 100:.1f} %\n")
 
         if len(daily_history) > DAILY_HISTORY_DAYS:
             daily_history.pop(0)
@@ -277,6 +395,7 @@ async def update_display():
     global trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
     global temperature_c, temp_24h_min, temp_24h_max, led_red, led_green, led_blue, DISPLAY_DATA
     global charge_Ah, energy_Wh, daily_Ah, daily_Wh
+    global comp_off_since, comp_on_since, comp_on_seconds_today, comp_on_seconds_yesterday
 
     display.set_font("bitmap8")
 
@@ -313,6 +432,12 @@ async def update_display():
         display.set_pen(WHITE)
         x = (320 - display.measure_text(time_str, scale=3)) // 2
         display.text(time_str, x, 1, scale=3)
+
+        # För att kunna visas även innan INA260-läsning lyckats
+        elapsed_h = 0.0
+        avg_A = 0.0
+        avg_W = 0.0
+        y_date, y_Ah, y_Wh = get_yesterday_values()
 
         # Temperatur
         if temperature_c is not None:
@@ -359,12 +484,21 @@ async def update_display():
             display.text(comp_str, x, 60, scale=3)
 
             if trigger_pin_15.value() == 1 and trigger_pin_13.value() == 1:  # Visa vanliga infon
-                minmax_str = f"Styr Min: {min_th:.2f}°C"
-                x = (320 - display.measure_text(minmax_str, scale=2)) // 2
-                display.set_pen(WHITE)
-                display.text(minmax_str, x, 90, scale=2)
+                
+                if comp_off_since != None:
+                    komp_tid_str = f"AV: {comp_off_since}"
+                    x = (320 - display.measure_text(komp_tid_str, scale=2)) // 2
+                    display.set_pen(WHITE)
+                    display.text(komp_tid_str, x, 90, scale=2)                    
+                else:
+                    komp_tid_str = f"PÅ: {comp_on_since}"
+                    x = (320 - display.measure_text(komp_tid_str, scale=2)) // 2
+                    display.set_pen(WHITE)
+                    display.text(komp_tid_str, x, 90, scale=2)
 
-                minmax_str = f"Styr Max: {max_th:.2f}°C"
+                min_str = f"Styr Min: {min_th:.2f}°C "
+                max_str = f"Max: {max_th:.2f}°C"
+                minmax_str = min_str + max_str
                 x = (320 - display.measure_text(minmax_str, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(minmax_str, x, 110, scale=2)
@@ -401,12 +535,10 @@ async def update_display():
                 display.set_pen(WHITE)
                 display.text(energy_text2, x, 110, scale=2)
 
-
                 daily_text = f"Dygn Ah:{daily_Ah:.3f} Wh:{daily_Wh:.2f}"
                 x = (320 - display.measure_text(daily_text, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(daily_text, x, 130, scale=2)
-
 
                 if y_date is None:
                     y_text = "Igår: --"
@@ -415,7 +547,7 @@ async def update_display():
                 x = (320 - display.measure_text(y_text, scale=2)) // 2
                 display.set_pen(WHITE)
                 display.text(y_text, x, 150, scale=2)
-            
+
             if trigger_pin_15.value() == 0:  # Visa status2 i stället
                 uptime_str = web_server.get_uptime() + " " + wlan.ifconfig()[0]
                 x = (320 - display.measure_text(uptime_str, scale=2)) // 2
@@ -450,11 +582,6 @@ async def update_display():
                 display.text(alarm_str, x, 174, scale=2)
 
         # INA260 + Energi/Ah/Wh + Dygn + Igår
-        elapsed_h = 0.0
-        avg_A = 0.0
-        avg_W = 0.0
-        y_date, y_Ah, y_Wh = get_yesterday_values()
-
         try:
             voltage = read_voltage()
             current = read_current()
@@ -498,6 +625,12 @@ async def update_display():
             "temp_max_2h": temp_24h_max,
             "comp_status": comp_str,
 
+            # NYTT: kompressor-tider
+            "comp_off_since": comp_off_since,
+            "comp_on_since": comp_on_since,
+            "comp_on_seconds_today": comp_on_seconds_today,
+            "comp_on_seconds_yesterday": comp_on_seconds_yesterday,
+
             "voltage": voltage,
             "current": current,
             "power": power,
@@ -535,6 +668,9 @@ async def read_temperature():
     control_pin_10.value(0)
     control_output_state_9 = False
     control_output_state_10 = False
+
+    # Initiera kompressor tracking från startläge (OFF)
+    _update_comp_tracking(_get_comp_mode())
 
     # Initial temperaturmätning
     if roms:
@@ -585,6 +721,9 @@ async def read_temperature():
                     elif temperature_c <= TEMP_OFF_THRESHOLD_9 and control_output_state_9:
                         control_pin_9.value(0)
                         control_output_state_9 = False
+
+                # NYTT: uppdatera kompressor tracking varje varv (efter ev. state-ändringar)
+                _update_comp_tracking(_get_comp_mode())
 
         except Exception as e:
             print("Temp-fel:", e)
