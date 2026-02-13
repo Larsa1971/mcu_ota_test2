@@ -267,7 +267,7 @@ def roll_daily_if_needed():
         })
 
 
-        with open(f"/data/{current_day_key}_{daily_Ah:.2f}Ah_{daily_Ah / 24.0:.2f}A_per_h.txt", "w") as f:
+        with open(f"/data/{current_day_key}_{daily_Ah:.2f}Ah_{daily_Ah / 24.0:.2f}A.txt", "w") as f:
             f.write(f"{current_day_key}\n")
             f.write(f"Förbrukat {daily_Ah} Ah\n")
             f.write(f"Förbrukat {daily_Wh} Wh\n")
@@ -278,7 +278,7 @@ def roll_daily_if_needed():
                 f.write(f"Kompressor {(comp_on_seconds_yesterday / 86400) * 100:.1f} %\n")
                 comp_on_seconds_yesterday = 0
             else:
-                f.write(f"Kompressor kört i {comp_on_seconds_today} sekunder\n")
+                f.write(f"Kompressor {comp_on_seconds_today/3600:.3f} timmar\n")
                 f.write(f"Kompressor {(comp_on_seconds_today / 86400) * 100:.1f} %\n")
 
         if len(daily_history) > DAILY_HISTORY_DAYS:
