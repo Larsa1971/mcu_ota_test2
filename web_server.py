@@ -344,6 +344,7 @@ def _build_status_values():
         "comp_on_since": html_escape(d.get("comp_on_since", "--")),
         "comp_off_since": html_escape(d.get("comp_off_since", "--")),
         "comp_on_seconds_today": html_escape(d.get("comp_on_seconds_today", "--")),
+        "comp_on_hours": html_escape(d.get("comp_on_hours", "--")),
 
         "charge_ah": html_escape(d.get("charge_ah", "--")),
         "energy_wh": html_escape(d.get("energy_wh", "--")),
@@ -488,7 +489,7 @@ _HTML_HEAD_AND_BODY_1 = """\
 
             <tr><td class="label">Kompressor på</td><td class="value" id="comp_on_since">{comp_on_since}</td></tr>
             <tr><td class="label">Kompressor av</td><td class="value" id="comp_off_since">{comp_off_since}</td></tr>
-            <tr><td class="label">Kompressor körd i sekunder</td><td class="value" id="comp_on_seconds_today">{comp_on_seconds_today}</td></tr>
+            <tr><td class="label">Kompressor timmar</td><td class="value" id="comp_on_hours">{comp_on_hours}</td></tr>
 
 
 
@@ -636,6 +637,7 @@ _HTML_BODY_2 = """\
           setText("comp_on_since", d.comp_on_since);
           setText("comp_off_since", d.comp_off_since);
           setText("comp_on_seconds_today", d.comp_on_seconds_today);
+          setText("comp_on_hours", d.comp_on_hours);
 
           setText("voltage", d.voltage, " V");
           setText("current", d.current, " A");
