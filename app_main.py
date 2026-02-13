@@ -80,6 +80,7 @@ comp_on_since = None
 # 3) antal sekunder kompressorn varit ON (LOW/HIGH) idag (nollas vid nytt dygn)
 comp_on_seconds_today = 0
 comp_on_seconds_yesterday = 0
+comp_on_hours = 0
 
 # Interna hjälpare för ackumulering & dygnsbyte
 _comp_last_state = None     # "OFF" / "LOW" / "HIGH"
@@ -107,7 +108,7 @@ def _update_comp_tracking(mode):
       - comp_on_seconds_today (summerar ON-tid per dag)
       - nollställer comp_on_seconds_today vid nytt svenskt dygn
     """
-    global comp_off_since, comp_on_since, comp_on_seconds_today, comp_on_seconds_yesterday
+    global comp_off_since, comp_on_since, comp_on_seconds_today, comp_on_seconds_yesterday, comp_on_hours
     global _comp_last_state, _comp_last_ts, _comp_day_key
 
     now = time.time()
@@ -159,6 +160,7 @@ def _update_comp_tracking(mode):
     if dt > 0 and dt < 30:
         if _comp_last_state in ("LOW", "HIGH"):
             comp_on_seconds_today += int(dt)
+            comp_on_hours = comp_on_seconds_today / 3600
 
     # Hantera state transition och "since"-tider
     if mode == "OFF":
@@ -186,6 +188,7 @@ DISPLAY_DATA = {
     "comp_on_since": None,
     "comp_on_seconds_today": 0,
     "comp_on_seconds_yesterday": 0,
+    "comp_on_hours": 0,
 
     "voltage": None,
     "current": None,
@@ -249,7 +252,7 @@ daily_history = []               # {"day": (Y,M,D), "Ah": x, "Wh": y}
 
 def roll_daily_if_needed():
     """Byter dygn baserat på svensk tid och nollställer daily_Ah/Wh."""
-    global current_day_key, daily_Ah, daily_Wh, daily_history, comp_on_seconds_today, comp_on_seconds_yesterday
+    global current_day_key, daily_Ah, daily_Wh, daily_history, comp_on_seconds_today, comp_on_seconds_yesterday, comp_on_hours
 
     t = time_handler.get_swedish_time_tuple()
     day_key = (t[0], t[1], t[2])  # (YYYY,MM,DD)
@@ -274,7 +277,7 @@ def roll_daily_if_needed():
             f.write(f"Snitt {daily_Ah / 24.0} A/h\n")
             f.write(f"Snitt {daily_Wh /24.0} W/h\n")
             if comp_on_seconds_yesterday != 0:
-                f.write(f"Kompressor kört i {comp_on_seconds_yesterday} sekunder\n")
+                f.write(f"Kompressor {comp_on_seconds_yesterday / 3600:.3f} timmar\n")
                 f.write(f"Kompressor {(comp_on_seconds_yesterday / 86400) * 100:.1f} %\n")
                 comp_on_seconds_yesterday = 0
             else:
@@ -395,7 +398,7 @@ async def update_display():
     global trigger_pin_12, trigger_pin_13, trigger_pin_14, trigger_pin_15, backlight_pin_20
     global temperature_c, temp_24h_min, temp_24h_max, led_red, led_green, led_blue, DISPLAY_DATA
     global charge_Ah, energy_Wh, daily_Ah, daily_Wh
-    global comp_off_since, comp_on_since, comp_on_seconds_today, comp_on_seconds_yesterday
+    global comp_off_since, comp_on_since, comp_on_seconds_today, comp_on_seconds_yesterday, comp_on_hours
 
     display.set_font("bitmap8")
 
@@ -630,6 +633,7 @@ async def update_display():
             "comp_on_since": comp_on_since,
             "comp_on_seconds_today": comp_on_seconds_today,
             "comp_on_seconds_yesterday": comp_on_seconds_yesterday,
+            "comp_on_hours": comp_on_hours,
 
             "voltage": voltage,
             "current": current,
