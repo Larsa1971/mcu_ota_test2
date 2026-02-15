@@ -288,6 +288,7 @@ def roll_daily_if_needed():
             daily_history.pop(0)
 
         # Nollställ för ny dag
+        comp_on_hours = 0.0
         daily_Ah = 0.0
         daily_Wh = 0.0
         current_day_key = day_key
