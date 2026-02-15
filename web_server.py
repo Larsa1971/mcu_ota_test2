@@ -209,7 +209,7 @@ def delete_data_file(filename: str):
 
 def get_uptime():
     elapsed_seconds = time.time() - time_handler.start_time_s
-    return "{:.3f} days".format(elapsed_seconds / 86400)
+    return "{:.3f} dagar".format(elapsed_seconds / 86400)
 
 
 def get_start_time_str():
@@ -475,7 +475,7 @@ _HTML_HEAD_AND_BODY_1 = """\
         <tbody>
             <tr><td class="label">Tid</td><td class="value" id="time_str">{time_str}</td></tr>
             <tr><td class="label">Startad</td><td class="value" id="start_time">{start_str}</td></tr>
-            <tr><td class="label">Uptid</td><td class="value" id="uptime">{uptime}</td></tr>
+            <tr><td class="label">Upptid</td><td class="value" id="uptime">{uptime}</td></tr>
 
             <tr><td class="label">Temperatur</td><td class="value" id="temperature">{temperature} °C</td></tr>
             <tr><td class="label">Min (Styr)</td><td class="value" id="temp_min">{temp_min} °C</td></tr>
@@ -484,15 +484,9 @@ _HTML_HEAD_AND_BODY_1 = """\
             <tr><td class="label">Max (6h)</td><td class="value" id="temp_max_2h">{temp_max_2h} °C</td></tr>
             <tr><td class="label">Kompressor</td><td class="value" id="comp_status">{comp_status}</td></tr>
 
-
-
-
             <tr><td class="label">Kompressor på</td><td class="value" id="comp_on_since">{comp_on_since}</td></tr>
             <tr><td class="label">Kompressor av</td><td class="value" id="comp_off_since">{comp_off_since}</td></tr>
             <tr><td class="label">Kompressor timmar</td><td class="value" id="comp_on_hours">{comp_on_hours}</td></tr>
-
-
-
 
             <tr><td class="label">Spänning</td><td class="value" id="voltage">{voltage} V</td></tr>
             <tr><td class="label">Ström</td><td class="value" id="current">{current} A</td></tr>
@@ -524,7 +518,7 @@ _HTML_HEAD_AND_BODY_1 = """\
             <col style="width:20%" />
             <col style="width:20%" />
         </colgroup>
-        <thead><tr><th>Name</th><th>Status</th><th>Health (ms)</th><th>Uptime (days)</th></tr></thead>
+        <thead><tr><th>Namn</th><th>Status</th><th>Hälsa (ms)</th><th>Upptid (dagar)</th></tr></thead>
         <tbody id="task-tbody">
 """
 
