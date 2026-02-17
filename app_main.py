@@ -279,7 +279,6 @@ def roll_daily_if_needed():
             if comp_on_seconds_yesterday != 0:
                 f.write(f"Kompressor {comp_on_seconds_yesterday / 3600:.3f} timmar\n")
                 f.write(f"Kompressor {(comp_on_seconds_yesterday / 86400) * 100:.1f} %\n")
-                comp_on_seconds_yesterday = 0
             else:
                 f.write(f"Kompressor {comp_on_seconds_today/3600:.3f} timmar\n")
                 f.write(f"Kompressor {(comp_on_seconds_today / 86400) * 100:.1f} %\n")
@@ -289,6 +288,8 @@ def roll_daily_if_needed():
 
         # Nollställ för ny dag
         comp_on_hours = 0.0
+        comp_on_seconds_today = 0
+        comp_on_seconds_yesterday = 0
         daily_Ah = 0.0
         daily_Wh = 0.0
         current_day_key = day_key
